@@ -96,7 +96,9 @@ class PyNext:
         )
 
     def _compile_tsx(self, file_path):
-
+        print(f"⚙️ Compiling {file_path}")
+        start_time = time.time()
+        
         current_dir = os.path.dirname(
             os.path.abspath(file_path)
         )
@@ -177,17 +179,20 @@ document.getElementById('root')
             stderr=subprocess.PIPE,
             text=True
         )
+        print(f"⚡ Built in {time.time() - start_time:.3f}s")
 
         if os.path.exists(entry_file):
             os.remove(entry_file)
+        
 
         return result.stdout
 
     def __call__(self, environ, start_response):
 
-        path = unquote(
-            environ.get("PATH_INFO", "/")
-        )
+        method = environ.get("REQUEST_METHOD", "GET")
+        path = unquote(environ.get("PATH_INFO", "/"))
+
+        print(f"[{method}] {path}")
 
         if path.startswith("/_bundle"):
 
