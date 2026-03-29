@@ -95,18 +95,117 @@ class PyNext:
             )
         )
 
+#     def _compile_tsx(self, file_path):
+#         print(f"⚙️ Compiling {file_path}")
+#         start_time = time.time()
+        
+#         current_dir = os.path.dirname(
+#             os.path.abspath(file_path)
+#         )
+
+#         layout_path = None
+#         check_dir = current_dir
+
+#         while check_dir.startswith(self.pages_dir):
+
+#             potential = os.path.join(
+#                 check_dir,
+#                 "layout.tsx"
+#             )
+
+#             if os.path.exists(potential):
+#                 layout_path = potential
+#                 break
+
+#             check_dir = os.path.dirname(check_dir)
+
+#         dir_name = os.path.dirname(file_path)
+#         file_name = os.path.basename(file_path)
+
+#         entry_file = os.path.join(
+#             dir_name,
+#             f".entry_{file_name}"
+#         )
+
+#         if layout_path:
+
+#             rel_layout = os.path.relpath(
+#                 layout_path,
+#                 dir_name
+#             ).replace("\\", "/")
+
+#             if not rel_layout.startswith("."):
+#                 rel_layout = f"./{rel_layout}"
+
+#             layout_import = f"import Layout from '{rel_layout}';"
+
+#             render_logic = (
+#                 "React.createElement(Layout,null,"
+#                 "React.createElement(Page,{params:window.__PARAMS__}))"
+#             )
+
+#         else:
+
+#             layout_import = ""
+#             render_logic = (
+#                 "React.createElement(Page,"
+#                 "{params:window.__PARAMS__})"
+#             )
+
+#         entry_code = f"""
+# import React from 'react';
+# import ReactDOM from 'react-dom/client';
+# import Page from './{file_name}';
+# {layout_import}
+# ReactDOM.createRoot(
+# document.getElementById('root')
+# ).render({render_logic});
+# """
+
+#         with open(entry_file, "w", encoding="utf-8") as f:
+#             f.write(entry_code)
+
+#         cmd = self.esbuild + [
+#             entry_file,
+#             "--bundle",
+#             "--format=iife",
+#             "--minify",
+#             "--platform=browser"
+#         ]
+
+#         result = subprocess.run(
+#             cmd,
+#             stdout=subprocess.PIPE,
+#             stderr=subprocess.PIPE,
+#             text=True
+#         )
+#         print(f"⚡ Built in {time.time() - start_time:.3f}s")
+
+#         if os.path.exists(entry_file):
+#             os.remove(entry_file)
+        
+
+#         return result.stdout
+
     def _compile_tsx(self, file_path):
+
         print(f"⚙️ Compiling {file_path}")
         start_time = time.time()
-        
+
         current_dir = os.path.dirname(
             os.path.abspath(file_path)
         )
 
-        layout_path = None
+        dir_name = os.path.dirname(file_path)
+        file_name = os.path.basename(file_path)
+
+        # ----------------------------------------
+        # Collect all layouts (root -> child)
+        # ----------------------------------------
+        layouts = []
         check_dir = current_dir
 
-        while check_dir.startswith(self.pages_dir):
+        while True:
 
             potential = os.path.join(
                 check_dir,
@@ -114,63 +213,83 @@ class PyNext:
             )
 
             if os.path.exists(potential):
-                layout_path = potential
+                layouts.append(potential)
+
+            if check_dir == self.pages_dir:
                 break
 
-            check_dir = os.path.dirname(check_dir)
+            parent = os.path.dirname(check_dir)
 
-        dir_name = os.path.dirname(file_path)
-        file_name = os.path.basename(file_path)
+            if parent == check_dir:
+                break
 
-        entry_file = os.path.join(
-            dir_name,
-            f".entry_{file_name}"
-        )
+            check_dir = parent
 
-        if layout_path:
+        # root → child order
+        # layouts
+
+        # ----------------------------------------
+        # Generate layout imports & wrappers
+        # ----------------------------------------
+        layout_imports = ""
+        layout_wrappers = "React.createElement(Page, { params: window.__PARAMS__ })"
+
+        for i, layout in enumerate(layouts):
 
             rel_layout = os.path.relpath(
-                layout_path,
+                layout,
                 dir_name
             ).replace("\\", "/")
 
             if not rel_layout.startswith("."):
                 rel_layout = f"./{rel_layout}"
 
-            layout_import = f"import Layout from '{rel_layout}';"
+            layout_name = f"Layout{i}"
 
-            render_logic = (
-                "React.createElement(Layout,null,"
-                "React.createElement(Page,{params:window.__PARAMS__}))"
-            )
+            layout_imports += f"import {layout_name} from '{rel_layout}';\n"
 
-        else:
+            layout_wrappers = f"""
+React.createElement(
+    {layout_name},
+    null,
+    {layout_wrappers}
+)
+    """
 
-            layout_import = ""
-            render_logic = (
-                "React.createElement(Page,"
-                "{params:window.__PARAMS__})"
-            )
+        # ----------------------------------------
+        # Create temporary entry file
+        # ----------------------------------------
+        entry_file = os.path.join(
+            dir_name,
+            f".entry_{file_name}"
+        )
 
         entry_code = f"""
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import Page from './{file_name}';
-{layout_import}
+{layout_imports}
+
 ReactDOM.createRoot(
-document.getElementById('root')
-).render({render_logic});
-"""
+    document.getElementById('root')
+).render(
+    {layout_wrappers}
+);
+    """
 
         with open(entry_file, "w", encoding="utf-8") as f:
             f.write(entry_code)
 
+        # ----------------------------------------
+        # ESBuild compile
+        # ----------------------------------------
         cmd = self.esbuild + [
             entry_file,
             "--bundle",
             "--format=iife",
-            "--minify",
-            "--platform=browser"
+            "--platform=browser",
+            "--loader:.tsx=tsx",
+            "--jsx=automatic"
         ]
 
         result = subprocess.run(
@@ -179,11 +298,18 @@ document.getElementById('root')
             stderr=subprocess.PIPE,
             text=True
         )
+
+        if result.stderr:
+            print("❌ ESBUILD ERROR:")
+            print(result.stderr)
+
         print(f"⚡ Built in {time.time() - start_time:.3f}s")
 
+        # ----------------------------------------
+        # Cleanup
+        # ----------------------------------------
         if os.path.exists(entry_file):
             os.remove(entry_file)
-        
 
         return result.stdout
 
