@@ -41,7 +41,7 @@ if DEPLOYMENT == "dev":
             if event.src_path.endswith(
                 (".tsx", ".jsx", ".py", ".js", ".json")
             ):
-                print(f"\n🔄 File changed: {event.src_path}")
+                print(f"\n[RUN] File changed: {event.src_path}")
                 self.restart()
 
 
@@ -59,14 +59,14 @@ if DEPLOYMENT == "dev":
 
             nonlocal process
 
-            print("♻️ Restarting server...")
+            print("[RUN] Restarting server...")
 
             process.terminate()
             process.wait()
 
             process = start_server()
 
-            print("✅ Server restarted")
+            print("[RUN] Server restarted")
 
         event_handler = ReloadHandler(restart)
         observer = Observer()
@@ -97,7 +97,7 @@ if DEPLOYMENT == "dev":
         main()
 
 else:
-    print("\n🟢 PyNext running in PRODUCTION mode\n")
+    print("\n[RUN] PyNext running in PRODUCTION mode\n")
 
     from server_runner import start
     start()

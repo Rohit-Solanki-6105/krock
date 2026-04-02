@@ -3,7 +3,7 @@ from core import PyNext
 
 app = PyNext()
 
-print("\n🚀 Server running at http://localhost:3000\n")
+print("\n[SERVER] Server running at http://localhost:3000\n")
 
 serve(
     app,

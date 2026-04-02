@@ -31,7 +31,7 @@ class PyNext:
             npx = "npx.cmd" if os.name == "nt" else "npx"
             self.esbuild = [npx, "--yes", "esbuild"]
 
-        print("\n🚀 PyNext Turbo Running")
+        print("\n[CORE] PyNext Turbo Running")
 
     def _discover_routes(self):
         routes = []
@@ -189,7 +189,7 @@ class PyNext:
 
     def _compile_tsx(self, file_path):
 
-        print(f"⚙️ Compiling {file_path}")
+        print(f"[CORE] Compiling {file_path}")
         start_time = time.time()
 
         current_dir = os.path.dirname(
@@ -300,10 +300,10 @@ ReactDOM.createRoot(
         )
 
         if result.stderr:
-            print("❌ ESBUILD ERROR:")
+            print("[CORE] ESBUILD ERROR:")
             print(result.stderr)
 
-        print(f"⚡ Built in {time.time() - start_time:.3f}s")
+        print(f"[CORE] Built in {time.time() - start_time:.3f}s")
 
         # ----------------------------------------
         # Cleanup
