@@ -6,6 +6,7 @@ load_dotenv()
 DEPLOYMENT = os.getenv("DEPLOYMENT", "prod")
 
 
+# if not DEPLOYMENT or DEPLOYMENT != "prod":
 if DEPLOYMENT == "dev":
     print("\n🟡 PyNext running in DEV mode (Hot Reload Enabled)\n")
 

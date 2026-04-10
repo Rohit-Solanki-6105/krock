@@ -1,5 +1,5 @@
-import React from 'react';
-
+import React from "react";
+// import "./globals.css"
 export default function Layout({ children }:{ children: React.ReactNode }) {
     const navigate = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
         // This is a simple version of "Client Side Routing"
