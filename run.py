@@ -1,49 +1,80 @@
 import os
 import sys
+import time
+import subprocess
 from dotenv import load_dotenv
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+
 load_dotenv()
 
 DEPLOYMENT = os.getenv("DEPLOYMENT", "prod")
 
 
-# if not DEPLOYMENT or DEPLOYMENT != "prod":
 if DEPLOYMENT == "dev":
+
     print("\n🟡 PyNext running in DEV mode (Hot Reload Enabled)\n")
 
-    import time
-    import subprocess
-    from watchdog.observers import Observer
-    from watchdog.events import FileSystemEventHandler
-
     WATCH_DIRS = ["pages", "core.py", "server_runner.py"]
+
+    IGNORE = {
+        ".krypter_tmp",
+        "__pycache__",
+        "node_modules",
+        "venv",
+        "styles",
+        ".git"
+    }
+
+    VALID_EXTENSIONS = (
+        ".tsx",
+        ".jsx",
+        ".py",
+        ".js",
+        ".json"
+    )
 
 
     class ReloadHandler(FileSystemEventHandler):
 
         def __init__(self, restart):
             self.restart = restart
+            self.last_restart = 0
 
-        def on_any_event(self, event):
+        def should_ignore(self, path):
+
+            for ignore in IGNORE:
+                if ignore in path:
+                    return True
+
+            return False
+
+        def on_modified(self, event):
 
             if event.is_directory:
                 return
 
-            filename = os.path.basename(event.src_path)
+            path = event.src_path
 
-            if filename.startswith(".entry"):
+            if self.should_ignore(path):
                 return
 
-            if filename.startswith("__pycache__"):
+            if not path.endswith(VALID_EXTENSIONS):
                 return
 
-            if filename.endswith((".pyc", ".log")):
+            now = time.time()
+
+            # debounce (1 second)
+            if now - self.last_restart < 1:
                 return
 
-            if event.src_path.endswith(
-                (".tsx", ".jsx", ".py", ".js", ".json")
-            ):
-                print(f"\n[RUN] File changed: {event.src_path}")
-                self.restart()
+            self.last_restart = now
+
+            print(f"\n[RUN] File changed: {path}")
+            self.restart()
+
+        def on_created(self, event):
+            self.on_modified(event)
 
 
     def start_server():
@@ -73,7 +104,9 @@ if DEPLOYMENT == "dev":
         observer = Observer()
 
         for path in WATCH_DIRS:
+
             if os.path.exists(path):
+
                 observer.schedule(
                     event_handler,
                     path,
@@ -98,6 +131,7 @@ if DEPLOYMENT == "dev":
         main()
 
 else:
+
     print("\n[RUN] PyNext running in PRODUCTION mode\n")
 
     from server_runner import start

@@ -648,11 +648,14 @@ ReactDOM.createRoot(
         # SSR Entry
         # ----------------------------------------
         ssr_file = os.path.join(tmp_dir, f"ssr_{safe_name}.tsx")
+        page_rel = os.path.relpath(file_path, tmp_dir).replace("\\", "/")
 
+        if not page_rel.startswith("."):
+            page_rel = "./" + page_rel
         ssr_code = f"""
 import React from 'react';
 import ReactDOMServer from 'react-dom/server';
-import Page from './{file_name}';
+import Page from './{page_rel}';
 {layout_imports}
 
 const params = JSON.parse(process.argv[2] || "{{}}");
@@ -712,7 +715,10 @@ console.log(html);
         result = subprocess.run(
             ["node", ssr_bundle, json.dumps(params)],
             stdout=subprocess.PIPE,
-            text=True
+            text=True,
+            encoding='utf-8',
+            errors='ignore',
+            # capture_output=True
         )
 
         ssr_html = result.stdout
