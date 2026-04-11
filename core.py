@@ -187,30 +187,387 @@ class PyNext:
 
 #         return result.stdout
 
-    def _compile_tsx(self, file_path):
+#     def _compile_tsx(self, file_path):
+
+#         print(f"[CORE] Compiling {file_path}")
+#         start_time = time.time()
+
+#         current_dir = os.path.dirname(
+#             os.path.abspath(file_path)
+#         )
+
+#         dir_name = os.path.dirname(file_path)
+#         file_name = os.path.basename(file_path)
+
+#         # ----------------------------------------
+#         # Collect all layouts (root -> child)
+#         # ----------------------------------------
+#         layouts = []
+#         check_dir = current_dir
+
+#         while True:
+
+#             potential = os.path.join(
+#                 check_dir,
+#                 "layout.tsx"
+#             )
+
+#             if os.path.exists(potential):
+#                 layouts.append(potential)
+
+#             if check_dir == self.pages_dir:
+#                 break
+
+#             parent = os.path.dirname(check_dir)
+
+#             if parent == check_dir:
+#                 break
+
+#             check_dir = parent
+
+#         # root → child order
+#         # layouts
+
+#         # ----------------------------------------
+#         # Generate layout imports & wrappers
+#         # ----------------------------------------
+#         layout_imports = ""
+#         layout_wrappers = "React.createElement(Page, { params: window.__PARAMS__ })"
+
+#         for i, layout in enumerate(layouts):
+
+#             rel_layout = os.path.relpath(
+#                 layout,
+#                 dir_name
+#             ).replace("\\", "/")
+
+#             if not rel_layout.startswith("."):
+#                 rel_layout = f"./{rel_layout}"
+
+#             layout_name = f"Layout{i}"
+
+#             layout_imports += f"import {layout_name} from '{rel_layout}';\n"
+
+#             layout_wrappers = f"""
+# React.createElement(
+#     {layout_name},
+#     null,
+#     {layout_wrappers}
+# )
+#     """
+
+#         # ----------------------------------------
+#         # Create temporary entry file
+#         # ----------------------------------------
+#         entry_file = os.path.join(
+#             dir_name,
+#             f".entry_{file_name}"
+#         )
+
+#         entry_code = f"""
+# import React from 'react';
+# import ReactDOM from 'react-dom/client';
+# import Page from './{file_name}';
+# {layout_imports}
+
+# ReactDOM.createRoot(
+#     document.getElementById('root')
+# ).render(
+#     {layout_wrappers}
+# );
+#     """
+
+#         with open(entry_file, "w", encoding="utf-8") as f:
+#             f.write(entry_code)
+
+#         # ----------------------------------------
+#         # ESBuild compile
+#         # ----------------------------------------
+#         cmd = self.esbuild + [
+#             entry_file,
+#             "--bundle",
+#             "--format=iife",
+#             "--platform=browser",
+#             "--loader:.tsx=tsx",
+#             "--jsx=automatic"
+#         ]
+
+#         result = subprocess.run(
+#             cmd,
+#             stdout=subprocess.PIPE,
+#             stderr=subprocess.PIPE,
+#             text=True
+#         )
+
+#         if result.stderr:
+#             print("[CORE] ESBUILD ERROR:")
+#             print(result.stderr)
+
+#         print(f"[CORE] Built in {time.time() - start_time:.3f}s")
+
+#         # ----------------------------------------
+#         # Cleanup
+#         # ----------------------------------------
+#         if os.path.exists(entry_file):
+#             os.remove(entry_file)
+
+#         return result.stdout
+#     def _compile_tsx(self, file_path, params=None):
+#         if params == None:
+#             params = {}
+
+#         print(f"[CORE] Compiling {file_path}")
+#         start_time = time.time()
+
+#         current_dir = os.path.dirname(
+#             os.path.abspath(file_path)
+#         )
+
+#         dir_name = os.path.dirname(file_path)
+#         file_name = os.path.basename(file_path)
+
+#         # ----------------------------------------
+#         # Collect all layouts (root -> child)
+#         # ----------------------------------------
+#         layouts = []
+#         check_dir = current_dir
+
+#         while True:
+
+#             potential = os.path.join(
+#                 check_dir,
+#                 "layout.tsx"
+#             )
+
+#             if os.path.exists(potential):
+#                 layouts.append(potential)
+
+#             if check_dir == self.pages_dir:
+#                 break
+
+#             parent = os.path.dirname(check_dir)
+
+#             if parent == check_dir:
+#                 break
+
+#             check_dir = parent
+
+#         # ----------------------------------------
+#         # Generate layout imports & wrappers
+#         # ----------------------------------------
+#         layout_imports = ""
+#         client_wrappers = "React.createElement(Page, { params: window.__PARAMS__ })"
+#         server_wrappers = "React.createElement(Page, { params })"
+
+#         for i, layout in enumerate(layouts):
+
+#             rel_layout = os.path.relpath(
+#                 layout,
+#                 dir_name
+#             ).replace("\\", "/")
+
+#             if not rel_layout.startswith("."):
+#                 rel_layout = f"./{rel_layout}"
+
+#             layout_name = f"Layout{i}"
+
+#             layout_imports += f"import {layout_name} from '{rel_layout}';\n"
+
+#             client_wrappers = f"""
+# React.createElement(
+#     {layout_name},
+#     null,
+#     {client_wrappers}
+# )
+#         """
+
+#             server_wrappers = f"""
+# React.createElement(
+#     {layout_name},
+#     null,
+#     {server_wrappers}
+# )
+#         """
+
+#         # ----------------------------------------
+#         # Create client entry
+#         # ----------------------------------------
+#         client_entry = os.path.join(
+#             dir_name,
+#             f".entry_client_{file_name}"
+#         )
+
+#         client_code = f"""
+# import React from 'react';
+# import {{ hydrateRoot }} from 'react-dom/client';
+# import Page from './{file_name}';
+# {layout_imports}
+
+# hydrateRoot(
+#     document.getElementById('root'),
+#     {client_wrappers}
+# );
+#     """
+
+#         with open(client_entry, "w", encoding="utf-8") as f:
+#             f.write(client_code)
+
+#         # ----------------------------------------
+#         # Create SSR entry
+#         # ----------------------------------------
+#         ssr_entry = os.path.join(
+#             dir_name,
+#             f".entry_ssr_{file_name}"
+#         )
+
+#         ssr_code = f"""
+# import React from 'react';
+# import {{ renderToString }} from 'react-dom/server';
+# import Page from './{file_name}';
+# {layout_imports}
+
+# const params = JSON.parse(process.argv[2] || '{{}}');
+
+# const html = renderToString(
+#     {server_wrappers}
+# );
+
+# console.log(html);
+#     """
+
+#         with open(ssr_entry, "w", encoding="utf-8") as f:
+#             f.write(ssr_code)
+
+#         # ----------------------------------------
+#         # Build client bundle
+#         # ----------------------------------------
+#         client_cmd = self.esbuild + [
+#             client_entry,
+#             "--bundle",
+#             "--format=iife",
+#             "--platform=browser",
+#             "--loader:.tsx=tsx",
+#             "--jsx=automatic"
+#         ]
+
+#         client_result = subprocess.run(
+#             client_cmd,
+#             stdout=subprocess.PIPE,
+#             stderr=subprocess.PIPE,
+#             text=True
+#         )
+
+#         if client_result.stderr:
+#             print("[CORE] CLIENT BUILD ERROR:")
+#             print(client_result.stderr)
+
+#         client_js = client_result.stdout
+
+#         # ----------------------------------------
+#         # Build SSR bundle
+#         # ----------------------------------------
+#         ssr_bundle = ssr_entry + ".js"
+
+#         ssr_cmd = self.esbuild + [
+#             ssr_entry,
+#             "--bundle",
+#             "--platform=node",
+#             "--format=cjs",
+#             "--outfile=" + ssr_bundle,
+#             "--loader:.tsx=tsx",
+#             "--jsx=automatic"
+#         ]
+
+#         subprocess.run(ssr_cmd)
+
+#         # ----------------------------------------
+#         # Run SSR bundle
+#         # ----------------------------------------
+#         ssr_html = ""
+
+#         try:
+#             result = subprocess.run(
+#                 ["node", ssr_bundle, json.dumps(params)],
+#                 stdout=subprocess.PIPE,
+#                 stderr=subprocess.PIPE,
+#                 text=True
+#             )
+
+#             ssr_html = result.stdout.strip()
+
+#         except Exception as e:
+#             print("[CORE] SSR ERROR:", e)
+
+#         # ----------------------------------------
+#         # Cleanup
+#         # ----------------------------------------
+#         for f in [client_entry, ssr_entry, ssr_bundle]:
+#             if os.path.exists(f):
+#                 os.remove(f)
+
+#         print(f"[CORE] Built in {time.time() - start_time:.3f}s")
+
+#     # ----------------------------------------
+#     # Return SEO HTML
+#     # ----------------------------------------
+#         html = f"""
+# <!DOCTYPE html>
+# <html>
+
+# <head>
+# <meta charset="UTF-8">
+# <meta name="viewport" content="width=device-width, initial-scale=1">
+
+# <script>
+# window.__PARAMS__ = {{}}
+# </script>
+
+# <link rel="stylesheet" href="/styles/output.css">
+
+# </head>
+
+# <body>
+
+# <div id="root">
+# {ssr_html}
+# </div>
+
+# <script>
+# {client_js}
+# </script>
+
+# </body>
+# </html>
+# """
+
+#         return html
+
+    def _compile_tsx(self, file_path, params=None):
+        project_root = os.path.dirname(self.pages_dir)
+
+        tmp_dir = os.path.join(project_root, ".krypter_tmp")
+
+        os.makedirs(tmp_dir, exist_ok=True)
+        
+        if params is None:
+            params = {}
 
         print(f"[CORE] Compiling {file_path}")
         start_time = time.time()
 
-        current_dir = os.path.dirname(
-            os.path.abspath(file_path)
-        )
-
+        current_dir = os.path.dirname(os.path.abspath(file_path))
         dir_name = os.path.dirname(file_path)
         file_name = os.path.basename(file_path)
 
         # ----------------------------------------
-        # Collect all layouts (root -> child)
+        # Collect layouts
         # ----------------------------------------
         layouts = []
         check_dir = current_dir
 
         while True:
 
-            potential = os.path.join(
-                check_dir,
-                "layout.tsx"
-            )
+            potential = os.path.join(check_dir, "layout.tsx")
 
             if os.path.exists(potential):
                 layouts.append(potential)
@@ -225,21 +582,18 @@ class PyNext:
 
             check_dir = parent
 
-        # root → child order
-        # layouts
+        # layouts.reverse()
 
         # ----------------------------------------
-        # Generate layout imports & wrappers
+        # Generate layout imports
         # ----------------------------------------
         layout_imports = ""
-        layout_wrappers = "React.createElement(Page, { params: window.__PARAMS__ })"
+        layout_wrappers_browser = "React.createElement(Page, { params: window.__PARAMS__ })"
+        layout_wrappers_ssr = "React.createElement(Page, { params })"
 
         for i, layout in enumerate(layouts):
 
-            rel_layout = os.path.relpath(
-                layout,
-                dir_name
-            ).replace("\\", "/")
+            rel_layout = os.path.relpath(layout, tmp_dir).replace("\\", "/")
 
             if not rel_layout.startswith("."):
                 rel_layout = f"./{rel_layout}"
@@ -248,32 +602,42 @@ class PyNext:
 
             layout_imports += f"import {layout_name} from '{rel_layout}';\n"
 
-            layout_wrappers = f"""
+            layout_wrappers_browser = f"""
 React.createElement(
     {layout_name},
     null,
-    {layout_wrappers}
+    {layout_wrappers_browser}
+)
+    """
+
+            layout_wrappers_ssr = f"""
+React.createElement(
+    {layout_name},
+    null,
+    {layout_wrappers_ssr}
 )
     """
 
         # ----------------------------------------
-        # Create temporary entry file
+        # Browser Entry
         # ----------------------------------------
-        entry_file = os.path.join(
-            dir_name,
-            f".entry_{file_name}"
-        )
+        safe_name = file_name.replace("[", "").replace("]", "").replace(".", "_")
 
+        entry_file = os.path.join(tmp_dir, f"entry_{safe_name}.tsx")
+        page_rel = os.path.relpath(file_path, tmp_dir).replace("\\", "/")
+
+        if not page_rel.startswith("."):
+            page_rel = "./" + page_rel
         entry_code = f"""
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import Page from './{file_name}';
+import Page from './{page_rel}';
 {layout_imports}
 
 ReactDOM.createRoot(
     document.getElementById('root')
 ).render(
-    {layout_wrappers}
+    {layout_wrappers_browser}
 );
     """
 
@@ -281,9 +645,32 @@ ReactDOM.createRoot(
             f.write(entry_code)
 
         # ----------------------------------------
-        # ESBuild compile
+        # SSR Entry
         # ----------------------------------------
-        cmd = self.esbuild + [
+        ssr_file = os.path.join(tmp_dir, f"ssr_{safe_name}.tsx")
+
+        ssr_code = f"""
+import React from 'react';
+import ReactDOMServer from 'react-dom/server';
+import Page from './{file_name}';
+{layout_imports}
+
+const params = JSON.parse(process.argv[2] || "{{}}");
+
+const html = ReactDOMServer.renderToString(
+    {layout_wrappers_ssr}
+);
+
+console.log(html);
+    """
+
+        with open(ssr_file, "w", encoding="utf-8") as f:
+            f.write(ssr_code)
+
+        # ----------------------------------------
+        # Build browser bundle
+        # ----------------------------------------
+        browser_cmd = self.esbuild + [
             entry_file,
             "--bundle",
             "--format=iife",
@@ -292,26 +679,81 @@ ReactDOM.createRoot(
             "--jsx=automatic"
         ]
 
-        result = subprocess.run(
-            cmd,
+        browser_result = subprocess.run(
+            browser_cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
         )
 
-        if result.stderr:
+        if browser_result.stderr:
             print("[CORE] ESBUILD ERROR:")
-            print(result.stderr)
+            print(browser_result.stderr)
+
+        # ----------------------------------------
+        # Build SSR bundle
+        # ----------------------------------------
+        ssr_bundle = os.path.join(tmp_dir, f"ssr_bundle_{safe_name}.js")
+
+        ssr_cmd = self.esbuild + [
+            ssr_file,
+            "--bundle",
+            "--platform=node",
+            "--outfile=" + ssr_bundle,
+            "--loader:.tsx=tsx",
+            "--jsx=automatic"
+        ]
+
+        subprocess.run(ssr_cmd)
+
+        # ----------------------------------------
+        # Run SSR
+        # ----------------------------------------
+        result = subprocess.run(
+            ["node", ssr_bundle, json.dumps(params)],
+            stdout=subprocess.PIPE,
+            text=True
+        )
+
+        ssr_html = result.stdout
 
         print(f"[CORE] Built in {time.time() - start_time:.3f}s")
 
         # ----------------------------------------
         # Cleanup
         # ----------------------------------------
-        if os.path.exists(entry_file):
-            os.remove(entry_file)
+        for f in [entry_file, ssr_file, ssr_bundle]:
+            if os.path.exists(f):
+                os.remove(f)
 
-        return result.stdout
+        # ----------------------------------------
+        # Final HTML
+        # ----------------------------------------
+        final_html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Krypter</title>
+<link rel="stylesheet" href="/styles/output.css">
+</head>
+<body>
+
+<div id="root">{ssr_html}</div>
+
+<script>
+window.__PARAMS__ = {json.dumps(params)}
+</script>
+
+<script>
+{browser_result.stdout}
+</script>
+
+</body>
+</html>
+"""
+
+        return final_html
 
     def __call__(self, environ, start_response):
 
@@ -320,31 +762,31 @@ ReactDOM.createRoot(
 
         print(f"[{method}] {path}")
 
-        if path.startswith("/_bundle"):
+        # if path.startswith("/_bundle"):
 
-            target = (
-                path
-                .replace("/_bundle", "")
-                .replace(".js", "")
-            )
+        #     target = (
+        #         path
+        #         .replace("/_bundle", "")
+        #         .replace(".js", "")
+        #     )
 
-            if target == "":
-                target = "/"
+        #     if target == "":
+        #         target = "/"
 
-            for regex, base, file_path, ext in self.routes:
+        #     for regex, base, file_path, ext in self.routes:
 
-                if base == target:
+        #         if base == target:
 
-                    js = self._compile_tsx(file_path)
+        #             js = self._compile_tsx(file_path)
 
-                    start_response(
-                        '200 OK',
-                        [
-                            ('Content-type', 'application/javascript'),
-                        ]
-                    )
+        #             start_response(
+        #                 '200 OK',
+        #                 [
+        #                     ('Content-type', 'application/javascript'),
+        #                 ]
+        #             )
 
-                    return (js.encode("utf-8"),)
+        #             return (js.encode("utf-8"),)
 
         for regex, base, file_path, ext in self.routes:
 
@@ -356,25 +798,7 @@ ReactDOM.createRoot(
 
                 if ext in ["tsx", "jsx"]:
 
-                    js_url = (
-                        f"/_bundle"
-                        f"{base if base != '/' else ''}"
-                        ".js"
-                    )
-
-                    html = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<script>
-window.__PARAMS__ = {json.dumps(params)};
-</script>
-</head>
-<body>
-<div id="root"></div>
-<script src="{js_url}"></script>
-</body>
-</html>"""
+                    html = self._compile_tsx(file_path, params)
 
                     start_response(
                         '200 OK',
@@ -384,7 +808,6 @@ window.__PARAMS__ = {json.dumps(params)};
                     )
 
                     return (html.encode("utf-8"),)
-
                 elif ext == "py":
 
                     spec = importlib.util.spec_from_file_location(
