@@ -1,5 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react'
 
-export default function About() {
-    return <h1>📖 About Us (Inside a Route Group!)</h1>;
+function index() {
+    const [ counter, setCounter] = useState(0);
+
+    return (
+        <div>
+            <button onClick={() => setCounter(counter+1)}>
+                Count = {counter}
+            </button>
+        </div>
+    )
 }
+
+export default index

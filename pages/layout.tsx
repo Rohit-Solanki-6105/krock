@@ -16,7 +16,7 @@ export default function Layout({ children }:{ children: React.ReactNode }) {
                 <a href="/" style={{
                     background: pathname == "/" ? "black" : "white"
                 }}>Home</a>
-                <a href="/about">About</a>
+                <a href="/about" className="bg-black">About</a>
                 <a href="/contact">Contact</a>
             </nav>
             <main style={{ padding: '2rem 0' }}>{children}</main>

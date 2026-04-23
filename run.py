@@ -96,6 +96,15 @@ if DEPLOYMENT == "dev":
             process.terminate()
             process.wait()
 
+            # ✅ clear cache BEFORE restarting
+            try:
+                import core
+                if hasattr(core, "app") and hasattr(core.app, "cache"):
+                    core.app.cache.clear()
+                    print("[CACHE] Cleared")
+            except:
+                pass
+
             process = start_server()
 
             print("[RUN] Server restarted")
