@@ -13,7 +13,7 @@ DEPLOYMENT = os.getenv("DEPLOYMENT", "prod")
 
 if DEPLOYMENT == "dev":
 
-    print("\n🟡 PyNext running in DEV mode (Hot Reload Enabled)\n")
+    print("\n[RUN] PyNext running in DEV mode (Hot Reload Enabled)\n")
 
     WATCH_DIRS = ["pages", "core.py", "server_runner.py"]
 
