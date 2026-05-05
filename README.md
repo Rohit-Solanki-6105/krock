@@ -1,12 +1,12 @@
-# 🚀 PyNext Turbo Framework
+# Krypter Turbo Framework
 
-**PyNext** is an ultra-fast, hybrid full-stack framework. It combines the simplicity and speed of a **Python WSGI backend** with the modern, component-driven experience of **React & TypeScript** on the frontend. 
+**Krypter** is an ultra-fast, hybrid full-stack framework. It combines the simplicity and speed of a **Python WSGI backend** with the modern, component-driven experience of **React & TypeScript** on the frontend. 
 
 It provides a Next.js-like developer experience—complete with hot-reloading, filesystem-based routing, Tailwind CSS integration, and a built-in SQLAlchemy database layer!
 
 ---
 
-## ✨ Features
+## Features
 - **Filesystem Routing**: Drop a `.tsx` file in the `/pages` folder and it becomes a route.
 - **Python API Routes**: Drop a `.py` file in `/pages/api` and handle backend logic natively.
 - **Tailwind CSS Built-in**: Seamless utility-first styling with auto-injection and hot-reloading.
@@ -16,7 +16,7 @@ It provides a Next.js-like developer experience—complete with hot-reloading, f
 
 ---
 
-## 🛠️ Getting Started
+## Getting Started
 
 1. **Install Dependencies**
    Ensure you have both Node.js and Python installed.
@@ -36,7 +36,7 @@ It provides a Next.js-like developer experience—complete with hot-reloading, f
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```text
 krypter/
@@ -56,7 +56,7 @@ krypter/
 
 ---
 
-## 🌐 Pages & Routing (Frontend)
+## Pages & Routing (Frontend)
 
 Routing is entirely determined by your filesystem in the `pages/` directory. 
 
@@ -88,7 +88,7 @@ export default function Layout({ children }) {
 
 ---
 
-## ⚙️ API Routes (Backend)
+## API Routes (Backend)
 
 You can write full Python backend logic alongside your frontend! Any `.py` file inside `pages/api/` becomes an endpoint.
 
@@ -115,7 +115,7 @@ def handler(environ, params):
 
 ---
 
-## 🎨 Styling with Tailwind CSS
+## Styling with Tailwind CSS
 
 Tailwind v3 is deeply integrated. 
 1. Write your standard Tailwind classes directly inside your `.tsx` files.
@@ -131,7 +131,7 @@ The framework automatically bundles your CSS and injects it into the page to pre
 
 ---
 
-## 🗄️ Database & ORM (SQLAlchemy + Alembic)
+## Database & ORM (SQLAlchemy + Alembic)
 
 PyNext comes pre-configured with **SQLAlchemy** (for querying) and **Alembic** (for migrations).
 
