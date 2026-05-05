@@ -1,4 +1,7 @@
-/* @import "tailwindcss"; */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Minimalist Reset */
 * {
     margin: 0;
@@ -30,3 +33,7 @@ img {
     margin: 0 auto;
     padding: 0 1rem;
 }
+
+/* p {
+    color: #ebb2b2 !important;
+} */

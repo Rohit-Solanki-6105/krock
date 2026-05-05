@@ -255,7 +255,7 @@ class PyNext:
 
         entry_code = f"""
 import React from 'react';
-import {{ createRoot }} from 'react-dom/client';
+import ReactDOM from 'react-dom/client';
 import Page from '{page_rel}';
 {layout_imports}
 
@@ -270,7 +270,7 @@ function render(App) {{
     root.render(App);
 }}
 
-render();
+render({layout_wrappers_browser});
 
 // SPA navigation
 window.__navigate = async (url) => {{
@@ -287,8 +287,7 @@ window.__navigate = async (url) => {{
         ? JSON.parse(paramsScript.textContent)
         : {{}};
 
-    root = createRoot(rootEl);
-    render();
+    render({layout_wrappers_browser});
 }};
 
 // Link interception
@@ -355,35 +354,51 @@ console.log(html);
         # Browser bundle
         # ----------------------------------------
         if not os.path.exists(browser_bundle):
-            subprocess.run(
-                self.esbuild + [
-                    entry_file,
-                    "--bundle",
-                    "--format=iife",
-                    "--platform=browser",
-                    "--outfile=" + browser_bundle,
-                    "--loader:.tsx=tsx",
-                    "--jsx=automatic"
-                ]
-            )
+            subprocess.run([
+                "node", 
+                os.path.join(project_root, "esbuild_worker.js"),
+                "browser", 
+                entry_file, 
+                browser_bundle
+            ])
 
         with open(browser_bundle, "r", encoding="utf-8") as f:
             browser_js = f.read()
 
         # ----------------------------------------
+        # Read extracted CSS if present
+        # ----------------------------------------
+        browser_css_file = browser_bundle.replace(".js", ".css")
+        browser_css_tw_file = browser_css_file.replace(".css", "_tw.css")
+        injected_css = ""
+        
+        if os.path.exists(browser_css_file):
+            npx = "npx.cmd" if os.name == "nt" else "npx"
+            cmd = [npx, "tailwindcss", "-i", browser_css_file, "-o", browser_css_tw_file]
+            if not IS_DEV:
+                cmd.append("--minify")
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if result.returncode != 0:
+                print("Tailwind Error:", result.stderr)
+            
+            if os.path.exists(browser_css_tw_file):
+                with open(browser_css_tw_file, "r", encoding="utf-8") as f:
+                    injected_css = f.read()
+            else:
+                with open(browser_css_file, "r", encoding="utf-8") as f:
+                    injected_css = f.read()
+
+        # ----------------------------------------
         # SSR bundle
         # ----------------------------------------
         if not os.path.exists(ssr_bundle):
-            subprocess.run(
-                self.esbuild + [
-                    ssr_file,
-                    "--bundle",
-                    "--platform=node",
-                    "--outfile=" + ssr_bundle,
-                    "--loader:.tsx=tsx",
-                    "--jsx=automatic"
-                ]
-            )
+            subprocess.run([
+                "node", 
+                os.path.join(project_root, "esbuild_worker.js"),
+                "node", 
+                ssr_file, 
+                ssr_bundle
+            ])
 
         # ----------------------------------------
         # Run SSR
@@ -404,9 +419,9 @@ console.log(html);
         # ----------------------------------------
         # Cleanup temp entries
         # ----------------------------------------
-        for f in [entry_file, ssr_file]:
-            if os.path.exists(f):
-                os.remove(f)
+        # for f in [entry_file, ssr_file]:
+        #     if os.path.exists(f):
+        #         os.remove(f)
 
         # ----------------------------------------
         # Final HTML
@@ -418,6 +433,7 @@ console.log(html);
 <meta charset="utf-8">
 <title>Krypter</title>
 <link rel="stylesheet" href="/styles/output.css">
+<style>{injected_css}</style>
 </head>
 <body>
 

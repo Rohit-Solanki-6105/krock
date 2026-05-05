@@ -31,7 +31,8 @@ if DEPLOYMENT == "dev":
         ".jsx",
         ".py",
         ".js",
-        ".json"
+        ".json",
+        ".css"
     )
 
 
