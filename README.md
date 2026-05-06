@@ -1,4 +1,4 @@
-# Krypter Turbo Framework
+# Krypter Framework
 
 **Krypter** is an ultra-fast, hybrid full-stack framework. It combines the simplicity and speed of a **Python WSGI backend** with the modern, component-driven experience of **React & TypeScript** on the frontend. 
 
@@ -133,7 +133,7 @@ The framework automatically bundles your CSS and injects it into the page to pre
 
 ## Database & ORM (SQLAlchemy + Alembic)
 
-PyNext comes pre-configured with **SQLAlchemy** (for querying) and **Alembic** (for migrations).
+Krypter comes pre-configured with **SQLAlchemy** (for querying) and **Alembic** (for migrations).
 
 ### 1. Defining Models
 Define your database tables in `models.py`:

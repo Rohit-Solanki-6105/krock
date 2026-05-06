@@ -259,54 +259,19 @@ import ReactDOM from 'react-dom/client';
 import Page from '{page_rel}';
 {layout_imports}
 
-let root = null;
 const rootEl = document.getElementById("root");
 
 function render(App) {{
-    if (root) {{
-        root.unmount(); // 🔥 IMPORTANT
+    if (window.__KRYPTER_ROOT__) {{
+        window.__KRYPTER_ROOT__.unmount();
     }}
-    root = ReactDOM.createRoot(rootEl);
-    root.render(App);
+    window.__KRYPTER_ROOT__ = ReactDOM.createRoot(rootEl);
+    window.__KRYPTER_ROOT__.render(App);
 }}
 
 render({layout_wrappers_browser});
 
-// SPA navigation
-window.__navigate = async (url) => {{
-    const res = await fetch(url);
-    const html = await res.text();
-
-    const doc = new DOMParser().parseFromString(html, "text/html");
-
-    const newRoot = doc.getElementById("root");
-    rootEl.innerHTML = newRoot.innerHTML;
-
-    const paramsScript = doc.querySelector("script[data-params]");
-    window.__PARAMS__ = paramsScript
-        ? JSON.parse(paramsScript.textContent)
-        : {{}};
-
-    render({layout_wrappers_browser});
-}};
-
-// Link interception
-document.addEventListener("click", (e) => {{
-    const a = e.target.closest("a");
-    if (!a) return;
-
-    const href = a.getAttribute("href");
-    if (!href || href.startsWith("http")) return;
-
-    e.preventDefault();
-    window.history.pushState({{}}, "", href);
-    window.__navigate(href);
-}});
-
-// Back/forward
-window.addEventListener("popstate", () => {{
-    window.__navigate(window.location.pathname);
-}});
+// Standard browser navigation will be used instead of SPA logic
 """
 
         with open(entry_file, "w", encoding="utf-8") as f:
