@@ -62,7 +62,7 @@ class PyNext:
             npx = "npx.cmd" if os.name == "nt" else "npx"
             self.esbuild = [npx, "--yes", "esbuild"]
 
-        print("\n[CORE] PyNext Turbo Running")
+        print("\n[CORE] Krypter Turbo Running")
        
 
 

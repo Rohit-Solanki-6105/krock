@@ -20,7 +20,7 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# --- PyNext Framework Specific ---
+# --- Krypter Framework Specific ---
 # Ignore the temporary entry files created by core.py
 pages/**/.entry_*
 .entry_*
