@@ -7,14 +7,10 @@ It provides a Next.js-like developer experience—complete with hot-reloading, f
 ## Installation
 
 ```npm
-npx create-krypter-app@latest .
+npx create-krypter-app@latest
 ```
 
-or
-
-```npm
-npx create-krypter-app@latest my-app-name
-```
+`Note: first of all it will ask for project name : . = current folder`
 
 ---
 
