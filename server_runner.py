@@ -1,7 +1,7 @@
 from waitress import serve
-from core import PyNext
+from core import Krypter
 
-app = PyNext()
+app = Krypter()
 
 print("\n[SERVER] Server running at http://localhost:3000\n")
 

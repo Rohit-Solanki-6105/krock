@@ -43,7 +43,7 @@ def get_imports(file_path, project_root):
 
     return imports
 
-class PyNext:
+class Krypter:
     def __init__(self, pages_dir="pages"):
         self.pages_dir = os.path.abspath(pages_dir)
         self.routes = self._discover_routes()
