@@ -4,6 +4,18 @@
 
 It provides a Next.js-like developer experience—complete with hot-reloading, filesystem-based routing, Tailwind CSS integration, and a built-in SQLAlchemy database layer!
 
+## Installation
+
+```npm
+npx create-krypter-app@latest .
+```
+
+or
+
+```npm
+npx create-krypter-app@latest my-app-name
+```
+
 ---
 
 ## Features
