@@ -50,8 +50,8 @@
     "postcss",
     "esbuild"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "Rohit Solanki",
+  "license": "MIT",
   "type": "commonjs",
   "dependencies": {
     "react": "^19.2.5",
