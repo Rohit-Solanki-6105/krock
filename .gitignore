@@ -8,8 +8,10 @@ venv/
 # create-krock-app
 ./create-krock-app
 ./create-krock-app/*
+create-krock-app
+create-krock-app/*
 
-# krockemp build files
+# krock build files
 .krock_tmp/
 
 # entry files

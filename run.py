@@ -18,7 +18,7 @@ if DEPLOYMENT == "dev":
     WATCH_DIRS = ["pages", "core.py", "server_runner.py"]
 
     IGNORE = {
-        ".krypter_tmp",
+        ".krock_tmp",
         "__pycache__",
         "node_modules",
         "venv",

@@ -23,7 +23,7 @@ from db import Base
 # from models import Todo
 
 # --- AUTOMATIC MODEL DISCOVERY ---
-IGNORE_DIRS = {".git", "venv", "node_modules", "__pycache__", "alembic", ".krypter_tmp", "styles"}
+IGNORE_DIRS = {".git", "venv", "node_modules", "__pycache__", "alembic", ".krock_tmp", "styles"}
 
 def discover_models():
     """Scans the project for files named *model*.py or *schema*.py and imports them"""

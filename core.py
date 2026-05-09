@@ -161,7 +161,7 @@ class Krock:
         IS_DEV = DEPLOYMENT == "dev"
 
         project_root = os.path.dirname(self.pages_dir)
-        tmp_dir = os.path.join(project_root, ".krypter_tmp")
+        tmp_dir = os.path.join(project_root, ".krock_tmp")
         os.makedirs(tmp_dir, exist_ok=True)
 
         print(f"[CORE] Compiling {file_path}")
@@ -261,11 +261,11 @@ import Page from '{page_rel}';
 const rootEl = document.getElementById("root");
 
 function render(App) {{
-    if (window.__KRYPTER_ROOT__) {{
-        window.__KRYPTER_ROOT__.unmount();
+    if (window.__KROCK_ROOT__) {{
+        window.__KROCK_ROOT__.unmount();
     }}
-    window.__KRYPTER_ROOT__ = ReactDOM.createRoot(rootEl);
-    window.__KRYPTER_ROOT__.render(App);
+    window.__KROCK_ROOT__ = ReactDOM.createRoot(rootEl);
+    window.__KROCK_ROOT__.render(App);
 }}
 
 render({layout_wrappers_browser});
