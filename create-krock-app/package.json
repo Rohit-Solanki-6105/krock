@@ -1,0 +1,47 @@
+{
+  "name": "create-krockpp",
+  "version": "1.0.2",
+  "description": "a full stack framework combined with python(fast api), react and tailwind.",
+  "bin": {
+    "create-krock-app": "./index.js"
+  },
+  "keywords": [
+    "cli",
+    "create-app",
+    "create-krock-app",
+    "krock",
+    "venv",
+    "python",
+    "react",
+    "tailwind",
+    "full",
+    "stack",
+    "full-stack",
+    "scaffold",
+    "fast",
+    "api"
+  ],
+  "homepage": "https://github.com/Rohit-Solanki-6105/krock#readme",
+  "bugs": {
+    "url": "https://github.com/Rohit-Solanki-6105/krock/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Rohit-Solanki-6105/krock.git"
+  },
+  "license": "MIT",
+  "author": "Rohit Solanki",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "commander": "^14.0.3",
+    "execa": "^9.6.1",
+    "fs-extra": "^11.3.5",
+    "inquirer": "^13.4.2",
+    "ora": "^9.4.0"
+  }
+}

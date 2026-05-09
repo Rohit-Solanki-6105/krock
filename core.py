@@ -43,7 +43,7 @@ def get_imports(file_path, project_root):
 
     return imports
 
-class Krypter:
+class Krock:
     def __init__(self, pages_dir="pages"):
         self.pages_dir = os.path.abspath(pages_dir)
         self.routes = self._discover_routes()
@@ -62,7 +62,7 @@ class Krypter:
             npx = "npx.cmd" if os.name == "nt" else "npx"
             self.esbuild = [npx, "--yes", "esbuild"]
 
-        print("\n[CORE] Krypter Turbo Running")
+        print("\n[CORE] Krock Turbo Running")
        
 
 
@@ -154,9 +154,9 @@ class Krypter:
         if params is None:
             params = {}
 
-        # ----------------------------------------
+        
         # ENV MODE
-        # ----------------------------------------
+        
         DEPLOYMENT = os.getenv("DEPLOYMENT", "prod")
         IS_DEV = DEPLOYMENT == "dev"
 
@@ -170,9 +170,9 @@ class Krypter:
         current_dir = os.path.dirname(os.path.abspath(file_path))
         file_name = os.path.basename(file_path)
 
-        # ----------------------------------------
+        
         # Collect layouts
-        # ----------------------------------------
+        
         layouts = []
         check_dir = current_dir
 
@@ -191,9 +191,8 @@ class Krypter:
 
             check_dir = parent
 
-        # ----------------------------------------
-        # Dependency Graph
-        # ----------------------------------------
+        
+        # Dependency graph
         deps = self.build_dependency_graph(file_path, project_root)
 
         timestamps = []
@@ -210,9 +209,9 @@ class Krypter:
 
         cache_key = f"{file_path}:{latest_dep_time}:{json.dumps(params, sort_keys=True)}"
 
-        # ----------------------------------------
+        
         # DEV MODE → NO CACHE
-        # ----------------------------------------
+        
         if not IS_DEV and cache_key in self.cache:
             print("[CACHE] HIT")
             return self.cache[cache_key]
@@ -221,9 +220,9 @@ class Krypter:
             self.cache.clear()
             self.dep_cache.clear()
 
-        # ----------------------------------------
+        
         # Layout wrappers
-        # ----------------------------------------
+        
         layout_imports = ""
         layout_wrappers_browser = "React.createElement(Page, { params: window.__PARAMS__ })"
         layout_wrappers_ssr = "React.createElement(Page, { params })"
@@ -239,18 +238,18 @@ class Krypter:
             layout_wrappers_browser = f"React.createElement({name}, null, {layout_wrappers_browser})"
             layout_wrappers_ssr = f"React.createElement({name}, null, {layout_wrappers_ssr})"
 
-        # ----------------------------------------
+        
         # Safe name (dynamic routes safe)
-        # ----------------------------------------
+        
         safe_name = file_name.replace("[", "").replace("]", "").replace(".", "_")
 
         page_rel = os.path.relpath(file_path, tmp_dir).replace("\\", "/")
         if not page_rel.startswith("."):
             page_rel = "./" + page_rel
 
-        # ----------------------------------------
+        
         # CLIENT ENTRY
-        # ----------------------------------------
+        
         entry_file = os.path.join(tmp_dir, f"entry_{safe_name}.tsx")
 
         entry_code = f"""
@@ -277,9 +276,9 @@ render({layout_wrappers_browser});
         with open(entry_file, "w", encoding="utf-8") as f:
             f.write(entry_code)
 
-        # ----------------------------------------
+        
         # SSR ENTRY
-        # ----------------------------------------
+        
         ssr_file = os.path.join(tmp_dir, f"ssr_{safe_name}.tsx")
 
         ssr_code = f"""
@@ -300,24 +299,24 @@ console.log(html);
         with open(ssr_file, "w", encoding="utf-8") as f:
             f.write(ssr_code)
 
-        # ----------------------------------------
+        
         # Bundle paths
-        # ----------------------------------------
+        
         browser_bundle = os.path.join(tmp_dir, f"browser_{safe_name}.js")
         ssr_bundle = os.path.join(tmp_dir, f"ssr_{safe_name}.js")
 
-        # ----------------------------------------
+        
         # DEV → force rebuild
-        # ----------------------------------------
+        
         if IS_DEV:
             if os.path.exists(browser_bundle):
                 os.remove(browser_bundle)
             if os.path.exists(ssr_bundle):
                 os.remove(ssr_bundle)
 
-        # ----------------------------------------
+        
         # Browser bundle
-        # ----------------------------------------
+        
         if not os.path.exists(browser_bundle):
             subprocess.run([
                 "node", 
@@ -330,9 +329,9 @@ console.log(html);
         with open(browser_bundle, "r", encoding="utf-8") as f:
             browser_js = f.read()
 
-        # ----------------------------------------
+        
         # Read extracted CSS if present
-        # ----------------------------------------
+        
         browser_css_file = browser_bundle.replace(".js", ".css")
         browser_css_tw_file = browser_css_file.replace(".css", "_tw.css")
         injected_css = ""
@@ -353,9 +352,9 @@ console.log(html);
                 with open(browser_css_file, "r", encoding="utf-8") as f:
                     injected_css = f.read()
 
-        # ----------------------------------------
+        
         # SSR bundle
-        # ----------------------------------------
+        
         if not os.path.exists(ssr_bundle):
             subprocess.run([
                 "node", 
@@ -365,9 +364,9 @@ console.log(html);
                 ssr_bundle
             ])
 
-        # ----------------------------------------
+        
         # Run SSR
-        # ----------------------------------------
+        
         result = subprocess.run(
             ["node", ssr_bundle, json.dumps(params)],
             stdout=subprocess.PIPE,
@@ -381,22 +380,22 @@ console.log(html);
 
         print(f"[CORE] Built in {time.time() - start_time:.3f}s")
 
-        # ----------------------------------------
+        
         # Cleanup temp entries
-        # ----------------------------------------
+        
         # for f in [entry_file, ssr_file]:
         #     if os.path.exists(f):
         #         os.remove(f)
 
-        # ----------------------------------------
+        
         # Final HTML
-        # ----------------------------------------
+        
         final_html = f"""
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>Krypter</title>
+<title>Krock</title>
 <link rel="stylesheet" href="/styles/output.css">
 <style>{injected_css}</style>
 </head>

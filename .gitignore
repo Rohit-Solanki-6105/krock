@@ -5,8 +5,12 @@ __pycache__/
 venv/
 .env
 
-# Krypter temp build files
-.krypter_tmp/
+# create-krock-app
+./create-krock-app
+./create-krock-app/*
+
+# krockemp build files
+.krock_tmp/
 
 # entry files
 pages/.entry_*
@@ -20,7 +24,7 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# --- Krypter Framework Specific ---
+# --- krock Framework Specific ---
 # Ignore the temporary entry files created by core.py
 pages/**/.entry_*
 .entry_*

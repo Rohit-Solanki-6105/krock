@@ -13,7 +13,7 @@ DEPLOYMENT = os.getenv("DEPLOYMENT", "prod")
 
 if DEPLOYMENT == "dev":
 
-    print("\n[RUN] Krypter running in DEV mode (Hot Reload Enabled)\n")
+    print("\n[RUN] Krock running in DEV mode (Hot Reload Enabled)\n")
 
     WATCH_DIRS = ["pages", "core.py", "server_runner.py"]
 
@@ -142,7 +142,7 @@ if DEPLOYMENT == "dev":
 
 else:
 
-    print("\n[RUN] Krypter running in PRODUCTION mode\n")
+    print("\n[RUN] Krock running in PRODUCTION mode\n")
 
     from server_runner import start
     start()

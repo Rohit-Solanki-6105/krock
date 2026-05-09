@@ -20,6 +20,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
 from db import Base
+# from models import Todo
 
 # --- AUTOMATIC MODEL DISCOVERY ---
 IGNORE_DIRS = {".git", "venv", "node_modules", "__pycache__", "alembic", ".krypter_tmp", "styles"}
@@ -44,6 +45,7 @@ def discover_models():
 # Run discovery before setting target_metadata
 discover_models()
 target_metadata = Base.metadata
+# t1 = Todo.Base.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

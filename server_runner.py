@@ -1,7 +1,7 @@
 from waitress import serve
-from core import Krypter
+from core import Krock
 
-app = Krypter()
+app = Krock()
 
 print("\n[SERVER] Server running at http://localhost:3000\n")
 
