@@ -11,7 +11,7 @@ load_dotenv()
 DEPLOYMENT = os.getenv("DEPLOYMENT", "prod")
 
 
-if DEPLOYMENT == "dev":
+if not DEPLOYMENT or DEPLOYMENT == "dev":
 
     print("\n[RUN] Krock running in DEV mode (Hot Reload Enabled)\n")
 
