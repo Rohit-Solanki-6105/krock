@@ -1,0 +1,47 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# create-krock-app
+./create-krock-app
+./create-krock-app/*
+create-krock-app
+create-krock-app/*
+
+# krock build files
+.krock_tmp/
+
+# entry files
+pages/.entry_*
+pages/.entry_client_*
+pages/.entry_ssr_*
+
+# --- Node.js ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# --- krock Framework Specific ---
+# Ignore the temporary entry files created by core.py
+pages/**/.entry_*
+.entry_*
+
+# --- Build & Cache ---
+.cache/
+dist/
+build/
+
+# --- Operating System ---
+.DS_Store
+Thumbs.db
+*.swp
+
+# --- nodeenv ---
+# If you used nodeenv -p, it lives inside venv/, 
+# but if you created a standalone node directory:
+node/
