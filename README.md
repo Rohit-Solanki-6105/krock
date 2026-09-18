@@ -1,94 +1,178 @@
 # Krock Framework
 
-**Krock** is an ultra-fast, hybrid full-stack framework. It combines the simplicity and speed of a **Python WSGI backend** with the modern, component-driven experience of **React & TypeScript** on the frontend. 
+Krock is a high-performance, hybrid full-stack web framework combining a Python backend with a React 19 and TypeScript frontend compiled via esbuild and styled with Tailwind CSS.
 
-It provides a Next.js-like developer experience—complete with hot-reloading, filesystem-based routing, Tailwind CSS integration, and a built-in SQLAlchemy database layer!
-
-## Installation
-
-```npm
-npx create-krock-app@latest
-```
-
-`Note: first of all it will ask for project name : . = current folder`
-
----
-
-## Features
-- **Filesystem Routing**: Drop a `.tsx` file in the `/pages` folder and it becomes a route.
-- **Python API Routes**: Drop a `.py` file in `/pages/api` and handle backend logic natively.
-- **Tailwind CSS Built-in**: Seamless utility-first styling with auto-injection and hot-reloading.
-- **React 19 & TypeScript**: Native support out of the box via `esbuild`.
-- **Database Ready**: Pre-configured with SQLAlchemy & Alembic (defaults to SQLite, supports Postgres, MySQL, etc.).
-- **Hot Reloading**: Instant updates when you modify React components, CSS, or Python backend files.
+It provides a Next.js-like developer experience—complete with file-system routing, automatic Tailwind CSS processing, React 19 SSR and hydration, Ahead-Of-Time (AOT) production bundling, bounded LRU caching, and an intuitive Python API engine.
 
 ---
 
 ## Getting Started
 
-1. **Install Dependencies**
-   Ensure you have both Node.js and Python installed.
-   ```bash
-   # Install Node packages (React, esbuild, Tailwind)
-   npm install
+### Option 1: Create App CLI (Recommended)
 
-   # Install Python packages
+You can generate a brand new Krock project instantly using `create-krock-app`:
+
+```bash
+npx create-krock-app@latest
+```
+
+Follow the interactive prompts to set your project name and directory.
+
+### Option 2: Manual Setup
+
+If you prefer setting up manually or adding Krock to an existing project:
+
+1. **Clone or Download the Repository**
+   ```bash
+   git clone https://github.com/your-repo/krock.git
+   cd krock
+   ```
+
+2. **Install Node Dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Set Up Python Environment & Dependencies**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
    pip install -r requirements.txt
    ```
 
-2. **Run the Development Server**
+4. **Run the Development Server**
    ```bash
-   npm run dev
+   python run.py
    ```
-   *This starts the Python watcher and the esbuild bundler in development mode. Head over to `http://localhost:3000` to see your app!*
+   *Starts the dev server with hot-reloading at http://localhost:3000.*
 
 ---
 
-## Project Structure
+## Production Deployment
+
+For production environments, pre-compile all static bundles and SSR templates Ahead-Of-Time (AOT):
+
+```bash
+# 1. Pre-compile all bundles
+python run.py build
+
+# 2. Launch in Production mode
+DEPLOYMENT=prod python run.py
+```
+
+---
+
+## Features Overview
+
+- **File-System Routing**: Add `.tsx` files in `pages/` for UI pages, or `.py` files in `pages/api/` for backend API routes.
+- **React 19 SSR & Hydration**: Full server-side HTML rendering with `ReactDOM.hydrateRoot` for zero-flicker client hydration.
+- **Python Request Wrapper (`KrockRequest`)**: Clean API helper providing `req.json()`, `req.query`, `req.method`, `req.params`, and status tuple responses.
+- **Zero-Config Dev Mode**: Runs out of the box on port 3000 with hot-reloading without requiring a `.env` file.
+- **Bounded LRU Cache**: Thread-safe memory caching preventing memory leaks on dynamic routes.
+- **Tailwind CSS Built-In**: Automatic CSS extraction, bundling, and hot-injection.
+- **Database Ready**: Pre-configured with SQLAlchemy and Alembic (defaults to SQLite, supports PostgreSQL, MySQL, MongoDB).
+- **Client Utilities**: Includes `lib/krock.ts` for typed API fetches (`krockFetch`) and parameter extraction (`getKrockParams`).
+
+---
+
+## Project Directory Structure
 
 ```text
 krock/
 ├── pages/                  # Frontend pages & Backend APIs
 │   ├── api/                # Python API routes
-│   │   └── todos.py        # Example: http://localhost:3000/api/todos
+│   │   └── todos.py        # Accessible at http://localhost:3000/api/todos
 │   ├── layout.tsx          # Global React layout wrapper
 │   ├── globals.css         # Global CSS & Tailwind imports
 │   └── index.tsx           # Entry page (http://localhost:3000/)
 ├── components/             # Reusable React components
+├── lib/                    # Client-side TypeScript utilities
+│   └── krock.ts            # Typed API fetch & parameter helpers
 ├── alembic/                # Database migration scripts
 ├── db.py                   # Database connection setup
 ├── models.py               # SQLAlchemy ORM models
-├── core.py                 # Core routing & WSGI engine (Do not edit)
-└── run.py                  # Dev server and Hot-reloader
+├── core.py                 # Core Krock routing & WSGI engine
+├── run.py                  # Dev server launcher & build runner
+└── server_runner.py        # Waitress WSGI server runner
 ```
 
 ---
 
-## Pages & Routing (Frontend)
+## Usage Guide & Code Examples
 
-Routing is entirely determined by your filesystem in the `pages/` directory. 
+### 1. Creating Backend API Routes (`pages/api/`)
 
-### Creating a Page
-To create a new route, simply create a React component:
+Create a Python file inside `pages/api/`. Use the `KrockRequest` object for simple, clean request handling:
+
+```python
+# pages/api/hello.py
+
+def handler(req):
+    method = req.method
+
+    if method == "GET":
+        name = req.get("name", "World")
+        return {"message": f"Hello, {name}!"}
+
+    if method == "POST":
+        data = req.json()
+        title = data.get("title", "")
+        if not title:
+            return {"error": "Title is required"}, "400 Bad Request"
+        
+        return {"status": "created", "title": title}, "201 Created"
+```
+
+*Note*: Legacy WSGI signature `def handler(environ, params):` is also supported for backward compatibility.
+
+### 2. Creating Frontend Pages (`pages/`)
+
+Create a React component exported as `default` inside `pages/`:
+
 ```tsx
 // pages/about.tsx
 import React from 'react';
 
-export default function About() {
-    return <h1 className="text-2xl text-blue-500">About Us</h1>;
+export default function About({ params }: { params: any }) {
+    return (
+        <div className="p-8 max-w-2xl mx-auto">
+            <h1 className="text-3xl font-bold text-blue-600 mb-4">About Us</h1>
+            <p className="text-gray-700 text-lg">
+                Welcome to our application built with Krock!
+            </p>
+        </div>
+    );
 }
 ```
-*Navigating to `/about` will render this component.*
 
-### The Layout
-`pages/layout.tsx` is a special file that wraps all of your pages. Use this for your Navigation bar, Footer, and global imports.
+### 3. Fetching API Data in Components (`lib/krock.ts`)
+
+Use `krockFetch` for typed client-side API requests:
+
 ```tsx
-import "./globals.css"; // Your Tailwind CSS
-export default function Layout({ children }) {
+// pages/todos.tsx
+import React, { useEffect, useState } from 'react';
+import { krockFetch } from '@/lib/krock';
+
+export default function TodosPage() {
+    const [todos, setTodos] = useState<any[]>([]);
+
+    useEffect(() => {
+        krockFetch('/api/todos')
+            .then((data) => setTodos(data))
+            .catch((err) => console.error(err));
+    }, []);
+
     return (
-        <div>
-            <nav>My App Navbar</nav>
-            <main>{children}</main>
+        <div className="p-8">
+            <h1 className="text-2xl font-bold mb-4">Todo List</h1>
+            <ul className="space-y-2">
+                {todos.map((todo) => (
+                    <li key={todo.id} className="p-3 bg-white rounded shadow">
+                        {todo.title}
+                    </li>
+                ))}
+            </ul>
         </div>
     );
 }
@@ -96,111 +180,52 @@ export default function Layout({ children }) {
 
 ---
 
-## API Routes (Backend)
+## Database Configuration (SQLAlchemy + Alembic)
 
-You can write full Python backend logic alongside your frontend! Any `.py` file inside `pages/api/` becomes an endpoint.
+Krock comes pre-configured with SQLAlchemy ORM and Alembic migrations.
 
-### Creating an API Endpoint
-```python
-# pages/api/hello.py
-import json
+### 1. Define Models
+Define database tables in `models.py`:
 
-def handler(environ, params):
-    # environ contains all standard WSGI request data
-    method = environ.get("REQUEST_METHOD", "GET")
-
-    if method == "GET":
-        return {"message": "Hello from Python!"}
-    
-    if method == "POST":
-        # Read JSON body
-        content_length = int(environ.get('CONTENT_LENGTH', 0))
-        body = environ['wsgi.input'].read(content_length)
-        data = json.loads(body)
-        return {"status": "success", "received": data}
-```
-*This is accessible at `http://localhost:3000/api/hello`.*
-
----
-
-## Styling with Tailwind CSS
-
-Tailwind v3 is deeply integrated. 
-1. Write your standard Tailwind classes directly inside your `.tsx` files.
-2. Ensure `globals.css` includes the Tailwind directives:
-   ```css
-   @tailwind base;
-   @tailwind components;
-   @tailwind utilities;
-   ```
-3. Import `globals.css` inside your `layout.tsx`.
-
-The framework automatically bundles your CSS and injects it into the page to prevent unstyled flashes (FOUC).
-
----
-
-## Database & ORM (SQLAlchemy + Alembic)
-
-Krock comes pre-configured with **SQLAlchemy** (for querying) and **Alembic** (for migrations).
-
-### 1. Defining Models
-Define your database tables in `models.py`:
 ```python
 # models.py
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, Boolean
 from db import Base
 
-class User(Base):
-    __tablename__ = "users"
+class Task(Base):
+    __tablename__ = "tasks"
+
     id = Column(Integer, primary_key=True)
-    name = Column(String)
+    title = Column(String(255), nullable=False)
+    completed = Column(Boolean, default=False)
 ```
 
-### 2. Database Migrations
-Whenever you change `models.py`, you must generate a migration script to update the database schema:
-```bash
-# 1. Generate the migration script
-alembic revision --autogenerate -m "Added User table"
+### 2. Run Database Migrations
 
-# 2. Apply the migration to the database
+```bash
+# Generate a new migration script
+alembic revision --autogenerate -m "Add Task table"
+
+# Apply migrations to database
 alembic upgrade head
 ```
 
-### 3. Switching Databases (SQLite, Postgres, MySQL)
-By default, the framework uses **SQLite** (`todos.db`). You can easily switch to a production database like **PostgreSQL** or **MySQL**.
+### 3. Switch to PostgreSQL or MySQL
 
-To switch, simply update the `sqlalchemy.url` in **two places**:
-1. **`db.py`**
-2. **`alembic.ini`**
+To use PostgreSQL or MySQL instead of the default SQLite:
 
-**PostgreSQL Example:**
+Update `SQLALCHEMY_DATABASE_URL` in both `db.py` and `alembic.ini`:
+
 ```python
-# Install psycopg2: pip install psycopg2-binary
+# PostgreSQL Example
 SQLALCHEMY_DATABASE_URL = "postgresql://user:password@localhost/dbname"
-```
-**MySQL Example:**
-```python
-# Install PyMySQL: pip install pymysql
+
+# MySQL Example
 SQLALCHEMY_DATABASE_URL = "mysql+pymysql://user:password@localhost/dbname"
 ```
 
-### Using MongoDB?
-If you prefer NoSQL like MongoDB, you can safely delete `alembic/`, `alembic.ini`, and remove SQLAlchemy. Instead, use `pymongo` or `mongoengine` directly inside your `db.py`.
-
 ---
 
-## 🚀 Production Deployment
+## License
 
-When you are ready to deploy to production, set your environment variable:
-
-```bash
-# Windows
-set DEPLOYMENT=prod
-python run.py
-
-# Linux/Mac
-DEPLOYMENT=prod python run.py
-```
-In `prod` mode, the framework turns off hot-reloading, minifies the JavaScript and CSS bundles via `esbuild`, and optimizes serving speeds for a production environment!
-
-`Note: currently i am developing it properly, anyone can contribute to make it better, i am open to suggestions also.`
+MIT License. Contributions and feedback are welcome!

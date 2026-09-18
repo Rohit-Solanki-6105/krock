@@ -1,5 +1,3 @@
-import json
-from urllib.parse import parse_qs
 import sys
 import os
 
@@ -7,8 +5,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 import db
 from models import Todo
 
-def handler(environ, params):
-    method = environ.get("REQUEST_METHOD", "GET")
+def handler(req):
+    """Refactored API handler using KrockRequest for clean, modern Python API design."""
+    method = req.method
     session = db.get_db()
 
     try:
@@ -17,34 +16,28 @@ def handler(environ, params):
             return [todo.to_dict() for todo in todos]
 
         elif method == "POST":
-            content_length = int(environ.get('CONTENT_LENGTH', 0))
-            body = environ['wsgi.input'].read(content_length)
-            data = json.loads(body)
-            
+            data = req.json()
             title = data.get("title", "").strip()
             if not title:
-                return {"error": "Title is required"}
+                return {"error": "Title is required"}, "400 Bad Request"
 
             new_todo = Todo(title=title)
             session.add(new_todo)
             session.commit()
             session.refresh(new_todo)
-            return new_todo.to_dict()
+            return new_todo.to_dict(), "201 Created"
 
         elif method == "PUT":
-            content_length = int(environ.get('CONTENT_LENGTH', 0))
-            body = environ['wsgi.input'].read(content_length)
-            data = json.loads(body)
-            
+            data = req.json()
             todo_id = data.get("id")
             completed = data.get("completed", False)
-            
+
             if not todo_id:
-                return {"error": "ID is required"}
+                return {"error": "ID is required"}, "400 Bad Request"
 
             todo = session.query(Todo).filter(Todo.id == todo_id).first()
             if not todo:
-                return {"error": "Not found"}
+                return {"error": "Not found"}, "404 Not Found"
 
             todo.completed = completed
             session.commit()
@@ -52,29 +45,23 @@ def handler(environ, params):
             return todo.to_dict()
 
         elif method == "DELETE":
-            content_length = int(environ.get('CONTENT_LENGTH', 0))
-            if content_length > 0:
-                body = environ['wsgi.input'].read(content_length)
-                data = json.loads(body)
-                todo_id = data.get("id")
-            else:
-                query_string = environ.get('QUERY_STRING', '')
-                query_params = parse_qs(query_string)
-                todo_id = query_params.get("id", [None])[0]
+            todo_id = req.get("id")
+            if not todo_id and req.body():
+                todo_id = req.json().get("id")
 
             if not todo_id:
-                return {"error": "ID is required"}
+                return {"error": "ID is required"}, "400 Bad Request"
 
             todo = session.query(Todo).filter(Todo.id == todo_id).first()
             if todo:
                 session.delete(todo)
                 session.commit()
-            
+
             return {"success": True}
 
-        return {"error": "Method not allowed"}
+        return {"error": "Method not allowed"}, "405 Method Not Allowed"
     except Exception as e:
         session.rollback()
-        return {"error": str(e)}
+        return {"error": str(e)}, "500 Internal Server Error"
     finally:
         session.close()

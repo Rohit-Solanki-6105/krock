@@ -3,51 +3,158 @@ import sys
 import json
 import time
 import re
+import inspect
 import subprocess
 import importlib.util
-from urllib.parse import unquote
+import traceback
+from collections import OrderedDict
+import threading
+from urllib.parse import unquote, parse_qs
 from socketserver import ThreadingMixIn
 from wsgiref.simple_server import WSGIServer
 
-DEPLOYMENT = os.getenv("DEPLOYMENT", "prod")
+DEPLOYMENT = os.getenv("DEPLOYMENT", "dev")
 IS_DEV = DEPLOYMENT == "dev"
 
 class ThreadedWSGIServer(ThreadingMixIn, WSGIServer):
     daemon_threads = True
+
+class LRUCache:
+    def __init__(self, capacity=1000):
+        self.capacity = capacity
+        self.cache = OrderedDict()
+        self.lock = threading.Lock()
+
+    def get(self, key):
+        with self.lock:
+            if key not in self.cache:
+                return None
+            self.cache.move_to_end(key)
+            return self.cache[key]
+
+    def set(self, key, value):
+        with self.lock:
+            if key in self.cache:
+                self.cache.move_to_end(key)
+            self.cache[key] = value
+            if len(self.cache) > self.capacity:
+                self.cache.popitem(last=False)
+
+    def clear(self):
+        with self.lock:
+            self.cache.clear()
+
+    def __contains__(self, key):
+        with self.lock:
+            return key in self.cache
+
+class KrockRequest:
+    """Modern request wrapper around WSGI environ and route parameters."""
+    def __init__(self, environ, params=None):
+        self.environ = environ
+        self.params = params or {}
+        self.method = environ.get("REQUEST_METHOD", "GET").upper()
+        self.path = unquote(environ.get("PATH_INFO", "/"))
+        self.query_string = environ.get("QUERY_STRING", "")
+        parsed_qs = parse_qs(self.query_string)
+        self.query = {k: v[0] if len(v) == 1 else v for k, v in parsed_qs.items()}
+        self._json = None
+        self._body = None
+
+    def body(self) -> bytes:
+        if self._body is None:
+            try:
+                content_length = int(self.environ.get('CONTENT_LENGTH', 0) or 0)
+            except ValueError:
+                content_length = 0
+            if content_length > 0:
+                self._body = self.environ['wsgi.input'].read(content_length)
+            else:
+                self._body = b""
+        return self._body
+
+    def json(self):
+        if self._json is None:
+            b = self.body()
+            if b:
+                try:
+                    self._json = json.loads(b.decode('utf-8'))
+                except Exception:
+                    self._json = {}
+            else:
+                self._json = {}
+        return self._json
+
+    def text(self) -> str:
+        return self.body().decode('utf-8', errors='ignore')
+
+    def get(self, key, default=None):
+        """Helper to get param or query item."""
+        if key in self.params:
+            return self.params[key]
+        if key in self.query:
+            return self.query[key]
+        return default
 
 def resolve_alias(path, project_root):
     if path.startswith("@/"):
         return os.path.join(project_root, path.replace("@/", ""))
     return path
 
-
 def get_imports(file_path, project_root):
     imports = []
+    if not os.path.exists(file_path):
+        return imports
 
-    with open(file_path, "r", encoding="utf-8") as f:
-        content = f.read()
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
 
-    matches = re.findall(r'import .* from [\'"](.*?)[\'"]', content)
+        matches = re.findall(r'import .* from [\'"](.*?)[\'"]', content)
+        matches += re.findall(r'import [\'"](.*?)[\'"]', content)
 
-    for imp in matches:
-        if imp.startswith(".") or imp.startswith("@/"):
-            full_path = resolve_alias(
-                os.path.normpath(os.path.join(os.path.dirname(file_path), imp)),
-                project_root
-            )
+        for imp in matches:
+            if imp.startswith(".") or imp.startswith("@/"):
+                full_path = resolve_alias(
+                    os.path.normpath(os.path.join(os.path.dirname(file_path), imp)),
+                    project_root
+                )
 
-            for ext in [".tsx", ".ts", ".jsx", ".js"]:
-                if os.path.exists(full_path + ext):
-                    imports.append(full_path + ext)
-                    break
+                for ext in [".tsx", ".ts", ".jsx", ".js", ".css"]:
+                    if os.path.exists(full_path + ext):
+                        imports.append(full_path + ext)
+                        break
+                    elif os.path.exists(full_path):
+                        imports.append(full_path)
+                        break
+    except Exception:
+        pass
 
     return imports
+
+MIME_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "application/javascript; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".svg": "image/svg+xml",
+    ".ico": "image/x-icon",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+    ".ttf": "font/ttf",
+    ".txt": "text/plain; charset=utf-8"
+}
 
 class Krock:
     def __init__(self, pages_dir="pages"):
         self.pages_dir = os.path.abspath(pages_dir)
+        self.project_root = os.path.dirname(self.pages_dir)
         self.routes = self._discover_routes()
-        self.cache = {}
+        self.cache = LRUCache(capacity=1000)
         self.dep_cache = {}
 
         venv_dir = os.path.dirname(sys.executable)
@@ -62,10 +169,7 @@ class Krock:
             npx = "npx.cmd" if os.name == "nt" else "npx"
             self.esbuild = [npx, "--yes", "esbuild"]
 
-        print("\n[CORE] Krock Turbo Running")
-       
-
-
+        print(f"[CORE] Krock Engine Active ({DEPLOYMENT.upper()} mode)")
 
     def build_dependency_graph(self, entry, project_root):
         if entry in self.dep_cache:
@@ -76,10 +180,8 @@ class Krock:
 
         while stack:
             file = stack.pop()
-
             if file in visited:
                 continue
-
             visited.add(file)
 
             for dep in get_imports(file, project_root):
@@ -90,10 +192,11 @@ class Krock:
 
     def _discover_routes(self):
         routes = []
+        if not os.path.exists(self.pages_dir):
+            return routes
 
         for root, _, files in os.walk(self.pages_dir):
             for file in files:
-
                 if file.startswith("layout.") or file.startswith(".entry"):
                     continue
 
@@ -150,39 +253,64 @@ class Krock:
             )
         )
 
-    def _compile_tsx(self, file_path, params=None):
+    def build_all(self):
+        """Ahead-Of-Time (AOT) build for production."""
+        print("[BUILD] Pre-compiling all pages Ahead-Of-Time...")
+        count = 0
+        for regex, base, file_path, ext in self.routes:
+            if ext in ["tsx", "jsx"]:
+                self._compile_tsx(file_path, params={}, force_build=True)
+                count += 1
+        print(f"[BUILD] Successfully pre-compiled {count} pages.")
+
+    def _render_error_html(self, title, details, stack_trace=""):
+        return f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Krock Error - {title}</title>
+    <style>
+        body {{ font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 2rem; }}
+        .card {{ background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 2rem; max-width: 900px; margin: 0 auto; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }}
+        h1 {{ color: #ef4444; font-size: 1.75rem; margin-top: 0; display: flex; align-items: center; gap: 0.5rem; }}
+        .badge {{ background: #991b1b; color: #fca5a5; font-size: 0.75rem; padding: 0.2rem 0.6rem; border-radius: 9999px; text-transform: uppercase; letter-spacing: 0.05em; }}
+        pre {{ background: #0f172a; padding: 1.25rem; border-radius: 8px; overflow-x: auto; color: #38bdf8; font-family: monospace; font-size: 0.9rem; line-height: 1.5; border: 1px solid #1e293b; }}
+        .details {{ font-size: 1.1rem; color: #cbd5e1; margin-bottom: 1.5rem; line-height: 1.6; }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>{title} <span class="badge">Development Error</span></h1>
+        <div class="details">{details}</div>
+        {f'<pre>{stack_trace}</pre>' if stack_trace else ''}
+    </div>
+</body>
+</html>"""
+
+    def _compile_tsx(self, file_path, params=None, force_build=False):
         if params is None:
             params = {}
 
-        
-        # ENV MODE
-        
-        DEPLOYMENT = os.getenv("DEPLOYMENT", "prod")
+        DEPLOYMENT = os.getenv("DEPLOYMENT", "dev")
         IS_DEV = DEPLOYMENT == "dev"
 
-        project_root = os.path.dirname(self.pages_dir)
-        tmp_dir = os.path.join(project_root, ".krock_tmp")
+        tmp_dir = os.path.join(self.project_root, ".krock_tmp")
         os.makedirs(tmp_dir, exist_ok=True)
 
-        print(f"[CORE] Compiling {file_path}")
         start_time = time.time()
-
         current_dir = os.path.dirname(os.path.abspath(file_path))
         file_name = os.path.basename(file_path)
 
-        
         # Collect layouts
-        
         layouts = []
         check_dir = current_dir
 
         while True:
             potential = os.path.join(check_dir, "layout.tsx")
-
             if os.path.exists(potential):
                 layouts.append(potential)
 
-            if check_dir == self.pages_dir:
+            if check_dir == self.pages_dir or check_dir == os.path.dirname(self.pages_dir):
                 break
 
             parent = os.path.dirname(check_dir)
@@ -191,38 +319,26 @@ class Krock:
 
             check_dir = parent
 
-        
-        # Dependency graph
-        deps = self.build_dependency_graph(file_path, project_root)
-
-        timestamps = []
-
-        for dep in deps:
-            if os.path.exists(dep):
-                timestamps.append(os.path.getmtime(dep))
-
+        # Dependency graph & modification check
+        deps = self.build_dependency_graph(file_path, self.project_root)
+        timestamps = [os.path.getmtime(dep) for dep in deps if os.path.exists(dep)]
         for l in layouts:
             if os.path.exists(l):
                 timestamps.append(os.path.getmtime(l))
 
         latest_dep_time = max(timestamps) if timestamps else 0
-
         cache_key = f"{file_path}:{latest_dep_time}:{json.dumps(params, sort_keys=True)}"
 
-        
-        # DEV MODE → NO CACHE
-        
-        if not IS_DEV and cache_key in self.cache:
-            print("[CACHE] HIT")
-            return self.cache[cache_key]
+        if not IS_DEV and not force_build:
+            cached_html = self.cache.get(cache_key)
+            if cached_html:
+                return cached_html
 
-        if IS_DEV:
-            self.cache.clear()
-            self.dep_cache.clear()
+        safe_name = file_name.replace("[", "").replace("]", "").replace(".", "_")
+        browser_bundle = os.path.join(tmp_dir, f"browser_{safe_name}.js")
+        ssr_bundle = os.path.join(tmp_dir, f"ssr_{safe_name}.js")
 
-        
-        # Layout wrappers
-        
+        # Layout imports synthesis
         layout_imports = ""
         layout_wrappers_browser = "React.createElement(Page, { params: window.__PARAMS__ })"
         layout_wrappers_ssr = "React.createElement(Page, { params })"
@@ -234,24 +350,15 @@ class Krock:
 
             name = f"Layout{i}"
             layout_imports += f"import {name} from '{rel_layout}';\n"
-
             layout_wrappers_browser = f"React.createElement({name}, null, {layout_wrappers_browser})"
             layout_wrappers_ssr = f"React.createElement({name}, null, {layout_wrappers_ssr})"
-
-        
-        # Safe name (dynamic routes safe)
-        
-        safe_name = file_name.replace("[", "").replace("]", "").replace(".", "_")
 
         page_rel = os.path.relpath(file_path, tmp_dir).replace("\\", "/")
         if not page_rel.startswith("."):
             page_rel = "./" + page_rel
 
-        
-        # CLIENT ENTRY
-        
+        # CLIENT ENTRY GENERATION WITH HYDRATION FIX
         entry_file = os.path.join(tmp_dir, f"entry_{safe_name}.tsx")
-
         entry_code = f"""
 import React from 'react';
 import ReactDOM from 'react-dom/client';
@@ -259,28 +366,22 @@ import Page from '{page_rel}';
 {layout_imports}
 
 const rootEl = document.getElementById("root");
+const appElement = {layout_wrappers_browser};
 
-function render(App) {{
-    if (window.__KROCK_ROOT__) {{
-        window.__KROCK_ROOT__.unmount();
+if (rootEl) {{
+    if (rootEl.hasChildNodes()) {{
+        ReactDOM.hydrateRoot(rootEl, appElement);
+    }} else {{
+        ReactDOM.createRoot(rootEl).render(appElement);
     }}
-    window.__KROCK_ROOT__ = ReactDOM.createRoot(rootEl);
-    window.__KROCK_ROOT__.render(App);
 }}
-
-render({layout_wrappers_browser});
-
-// Standard browser navigation will be used instead of SPA logic
 """
 
         with open(entry_file, "w", encoding="utf-8") as f:
             f.write(entry_code)
 
-        
-        # SSR ENTRY
-        
+        # SSR ENTRY GENERATION
         ssr_file = os.path.join(tmp_dir, f"ssr_{safe_name}.tsx")
-
         ssr_code = f"""
 import React from 'react';
 import ReactDOMServer from 'react-dom/server';
@@ -289,62 +390,56 @@ import Page from '{page_rel}';
 
 const params = JSON.parse(process.argv[2] || "{{}}");
 
-const html = ReactDOMServer.renderToString(
-    {layout_wrappers_ssr}
-);
-
-console.log(html);
+try {{
+    const html = ReactDOMServer.renderToString({layout_wrappers_ssr});
+    console.log(html);
+}} catch (err) {{
+    console.error("SSR_RENDER_ERROR:", err.stack || err);
+    process.exit(1);
+}}
 """
 
         with open(ssr_file, "w", encoding="utf-8") as f:
             f.write(ssr_code)
 
-        
-        # Bundle paths
-        
-        browser_bundle = os.path.join(tmp_dir, f"browser_{safe_name}.js")
-        ssr_bundle = os.path.join(tmp_dir, f"ssr_{safe_name}.js")
+        # Smart bundle rebuild check (only compile if target is missing or stale)
+        need_browser_rebuild = True
+        if os.path.exists(browser_bundle) and os.path.getmtime(browser_bundle) >= latest_dep_time and not IS_DEV:
+            need_browser_rebuild = False
 
-        
-        # DEV → force rebuild
-        
-        if IS_DEV:
-            if os.path.exists(browser_bundle):
-                os.remove(browser_bundle)
-            if os.path.exists(ssr_bundle):
-                os.remove(ssr_bundle)
-
-        
-        # Browser bundle
-        
-        if not os.path.exists(browser_bundle):
-            subprocess.run([
+        if need_browser_rebuild:
+            res = subprocess.run([
                 "node", 
-                os.path.join(project_root, "esbuild_worker.js"),
+                os.path.join(self.project_root, "esbuild_worker.js"),
                 "browser", 
                 entry_file, 
                 browser_bundle
-            ])
+            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-        with open(browser_bundle, "r", encoding="utf-8") as f:
-            browser_js = f.read()
+            if res.returncode != 0 and IS_DEV:
+                return self._render_error_html(
+                    "TypeScript / React Build Error",
+                    f"Failed to bundle <code>{file_path}</code>",
+                    res.stderr or res.stdout
+                )
 
-        
-        # Read extracted CSS if present
-        
+        browser_js = ""
+        if os.path.exists(browser_bundle):
+            with open(browser_bundle, "r", encoding="utf-8") as f:
+                browser_js = f.read()
+
+        # Tailwind CSS injection
         browser_css_file = browser_bundle.replace(".js", ".css")
         browser_css_tw_file = browser_css_file.replace(".css", "_tw.css")
         injected_css = ""
-        
+
         if os.path.exists(browser_css_file):
             npx = "npx.cmd" if os.name == "nt" else "npx"
             cmd = [npx, "tailwindcss", "-i", browser_css_file, "-o", browser_css_tw_file]
             if not IS_DEV:
                 cmd.append("--minify")
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            if result.returncode != 0:
-                print("Tailwind Error:", result.stderr)
-            
+
             if os.path.exists(browser_css_tw_file):
                 with open(browser_css_tw_file, "r", encoding="utf-8") as f:
                     injected_css = f.read()
@@ -352,21 +447,27 @@ console.log(html);
                 with open(browser_css_file, "r", encoding="utf-8") as f:
                     injected_css = f.read()
 
-        
-        # SSR bundle
-        
-        if not os.path.exists(ssr_bundle):
-            subprocess.run([
+        # SSR bundling & execution
+        need_ssr_rebuild = True
+        if os.path.exists(ssr_bundle) and os.path.getmtime(ssr_bundle) >= latest_dep_time and not IS_DEV:
+            need_ssr_rebuild = False
+
+        if need_ssr_rebuild:
+            res = subprocess.run([
                 "node", 
-                os.path.join(project_root, "esbuild_worker.js"),
+                os.path.join(self.project_root, "esbuild_worker.js"),
                 "node", 
                 ssr_file, 
                 ssr_bundle
-            ])
+            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
-        
-        # Run SSR
-        
+            if res.returncode != 0 and IS_DEV:
+                return self._render_error_html(
+                    "SSR Bundle Build Error",
+                    f"Failed to bundle SSR entry for <code>{file_path}</code>",
+                    res.stderr or res.stdout
+                )
+
         result = subprocess.run(
             ["node", ssr_bundle, json.dumps(params)],
             stdout=subprocess.PIPE,
@@ -376,27 +477,23 @@ console.log(html);
             errors="ignore"
         )
 
-        ssr_html = result.stdout
+        if result.returncode != 0 and IS_DEV:
+            return self._render_error_html(
+                "React SSR Runtime Error",
+                f"Exception during Server-Side Rendering of <code>{file_path}</code>",
+                result.stderr
+            )
 
-        print(f"[CORE] Built in {time.time() - start_time:.3f}s")
+        ssr_html = result.stdout.strip()
+        build_time = time.time() - start_time
+        print(f"[CORE] Compiled {os.path.basename(file_path)} in {build_time:.3f}s")
 
-        
-        # Cleanup temp entries
-        
-        # for f in [entry_file, ssr_file]:
-        #     if os.path.exists(f):
-        #         os.remove(f)
-
-        
-        # Final HTML
-        
-        final_html = f"""
-<!DOCTYPE html>
+        final_html = f"""<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<title>Krock</title>
-<link rel="stylesheet" href="/styles/output.css">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Krock App</title>
 <style>{injected_css}</style>
 </head>
 <body>
@@ -404,7 +501,7 @@ console.log(html);
 <div id="root">{ssr_html}</div>
 
 <script data-params>
-{json.dumps(params)}
+window.__PARAMS__ = {json.dumps(params)};
 </script>
 
 <script>
@@ -412,115 +509,124 @@ console.log(html);
 </script>
 
 </body>
-</html>
-"""
+</html>"""
 
         if not IS_DEV:
-            self.cache[cache_key] = final_html
+            self.cache.set(cache_key, final_html)
 
         return final_html
-    def __call__(self, environ, start_response):
 
+    def _serve_static_file(self, path, start_response):
+        """Serve static files from public/ or styles/ directory."""
+        if path.startswith("/"):
+            clean_path = path[1:]
+        else:
+            clean_path = path
+
+        possible_paths = [
+            os.path.join(self.project_root, clean_path),
+            os.path.join(self.project_root, "public", clean_path),
+            os.path.join(self.project_root, ".krock_tmp", clean_path)
+        ]
+
+        for file_path in possible_paths:
+            if os.path.exists(file_path) and os.path.isfile(file_path):
+                _, ext = os.path.splitext(file_path)
+                content_type = MIME_TYPES.get(ext.lower(), "application/octet-stream")
+
+                with open(file_path, "rb") as f:
+                    content = f.read()
+
+                start_response(
+                    "200 OK",
+                    [
+                        ("Content-Type", content_type),
+                        ("Content-Length", str(len(content))),
+                        ("Cache-Control", "public, max-age=3600" if not IS_DEV else "no-cache")
+                    ]
+                )
+                return (content,)
+
+        return None
+
+    def __call__(self, environ, start_response):
         method = environ.get("REQUEST_METHOD", "GET")
         path = unquote(environ.get("PATH_INFO", "/"))
 
-        print(f"[{method}] {path}")
+        # Check static file serving first
+        static_res = self._serve_static_file(path, start_response)
+        if static_res is not None:
+            return static_res
 
-        # if path.startswith("/_bundle"):
-
-        #     target = (
-        #         path
-        #         .replace("/_bundle", "")
-        #         .replace(".js", "")
-        #     )
-
-        #     if target == "":
-        #         target = "/"
-
-        #     for regex, base, file_path, ext in self.routes:
-
-        #         if base == target:
-
-        #             js = self._compile_tsx(file_path)
-
-        #             start_response(
-        #                 '200 OK',
-        #                 [
-        #                     ('Content-type', 'application/javascript'),
-        #                 ]
-        #             )
-
-        #             return (js.encode("utf-8"),)
-
+        # Match routes
         for regex, base, file_path, ext in self.routes:
-
             match = regex.match(path)
-
             if match:
-
                 params = match.groupdict()
 
                 if ext in ["tsx", "jsx"]:
+                    try:
+                        html = self._compile_tsx(file_path, params)
+                        start_response("200 OK", [("Content-type", "text/html; charset=utf-8")])
+                        return (html.encode("utf-8"),)
+                    except Exception as e:
+                        stack = traceback.format_exc()
+                        print(f"[ERROR] TSX Page Error: {e}\n{stack}")
+                        err_html = self._render_error_html("Framework Error", str(e), stack)
+                        start_response("500 Internal Server Error", [("Content-type", "text/html; charset=utf-8")])
+                        return (err_html.encode("utf-8"),)
 
-                    html = self._compile_tsx(file_path, params)
-
-                    start_response(
-                        '200 OK',
-                        [
-                            ('Content-type', 'text/html'),
-                        ]
-                    )
-
-                    return (html.encode("utf-8"),)
                 elif ext == "py":
+                    try:
+                        spec = importlib.util.spec_from_file_location("m", file_path)
+                        m = importlib.util.module_from_spec(spec)
+                        spec.loader.exec_module(m)
 
-                    spec = importlib.util.spec_from_file_location(
-                        "m",
-                        file_path
-                    )
+                        if hasattr(m, "handler"):
+                            sig = inspect.signature(m.handler)
+                            req = KrockRequest(environ, params)
 
-                    m = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(m)
+                            if len(sig.parameters) == 1:
+                                result = m.handler(req)
+                            else:
+                                result = m.handler(environ, params)
 
-                    # if path.startswith("/api/"):
-                    if hasattr(m, "handler"):
-                        data = (
-                            m.handler(environ, params)
-                            if hasattr(m, "handler")
-                            else {}
-                        )
+                            if isinstance(result, tuple) and len(result) == 2:
+                                data, status_code = result
+                            else:
+                                data = result
+                                status_code = "200 OK"
 
-                        res = json.dumps(data).encode("utf-8")
+                            if isinstance(data, (dict, list)):
+                                res_bytes = json.dumps(data).encode("utf-8")
+                                content_type = "application/json; charset=utf-8"
+                            elif isinstance(data, str):
+                                res_bytes = data.encode("utf-8")
+                                content_type = "text/html; charset=utf-8"
+                            elif isinstance(data, bytes):
+                                res_bytes = data
+                                content_type = "application/octet-stream"
+                            else:
+                                res_bytes = json.dumps(data).encode("utf-8")
+                                content_type = "application/json; charset=utf-8"
 
-                        start_response(
-                            '200 OK',
-                            [
-                                ('Content-type', 'application/json'),
-                            ]
-                        )
+                            start_response(status_code if isinstance(status_code, str) else "200 OK", [
+                                ("Content-type", content_type),
+                                ("Content-Length", str(len(res_bytes)))
+                            ])
+                            return (res_bytes,)
 
-                        return (res,)
+                        elif hasattr(m, "render"):
+                            res = m.render(params).encode("utf-8")
+                            start_response("200 OK", [("Content-type", "text/html; charset=utf-8")])
+                            return (res,)
 
-                    if hasattr(m, "render"):
-                    # else:
-                        res = (
-                            m.render(params)
-                            if hasattr(m, "render")
-                            else ""
-                        ).encode("utf-8")
+                    except Exception as e:
+                        stack = traceback.format_exc()
+                        print(f"[ERROR] API Route Error: {e}\n{stack}")
+                        err_data = json.dumps({"error": str(e), "traceback": stack if IS_DEV else None})
+                        start_response("500 Internal Server Error", [("Content-type", "application/json")])
+                        return (err_data.encode("utf-8"),)
 
-                        start_response(
-                            '200 OK',
-                            [
-                                ('Content-type', 'text/html'),
-                            ]
-                        )
-
-                        return (res,)
-
-        start_response(
-            '404 Not Found',
-            [('Content-type', 'text/html')]
-        )
-
+        start_response("404 Not Found", [("Content-type", "text/html; charset=utf-8")])
         return (b"<h1>404 - Page Not Found</h1>",)
