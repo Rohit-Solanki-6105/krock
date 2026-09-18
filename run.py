@@ -6,10 +6,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Zero-config default: fallback to 'dev' if DEPLOYMENT is not specified
 DEPLOYMENT = os.getenv("DEPLOYMENT", "dev")
 
-# Handle CLI build command: `python run.py build`
+# CLI build command: `python run.py build`
 if len(sys.argv) > 1 and sys.argv[1] == "build":
     print("\n[RUN] Triggering Ahead-Of-Time (AOT) Production Build...")
     os.environ["DEPLOYMENT"] = "prod"
@@ -27,8 +26,7 @@ if DEPLOYMENT == "dev":
     except ImportError:
         HAS_WATCHDOG = False
 
-    print("\n[RUN] Krock running in DEV mode (Hot Reload Enabled)")
-    print("[RUN] Zero-Config Active - Defaulting to Port 3000\n")
+    print("\n[RUN] Krock Dev Engine Starting (Single Server Mode - Port 3000)...")
 
     WATCH_DIRS = ["pages", "core.py", "server_runner.py", "components"]
     IGNORE = {".krock_tmp", "__pycache__", "node_modules", "venv", "styles", ".git"}
@@ -67,45 +65,43 @@ if DEPLOYMENT == "dev":
         return subprocess.Popen([sys.executable, "server_runner.py"], env=env)
 
     def main():
-        process = start_server()
+        server_proc = start_server()
 
         def restart():
-            nonlocal process
+            nonlocal server_proc
             print("[RUN] Reloading server...")
-            process.terminate()
+            server_proc.terminate()
             try:
-                process.wait(timeout=2)
+                server_proc.wait(timeout=2)
             except subprocess.TimeoutExpired:
-                process.kill()
+                server_proc.kill()
 
-            process = start_server()
+            server_proc = start_server()
             print("[RUN] Server reloaded.")
 
-        if HAS_WATCHDOG:
-            event_handler = ReloadHandler(restart)
-            observer = Observer()
-            for path in WATCH_DIRS:
-                if os.path.exists(path):
-                    observer.schedule(event_handler, path, recursive=True)
-            observer.start()
+        try:
+            if HAS_WATCHDOG:
+                event_handler = ReloadHandler(restart)
+                observer = Observer()
+                for path in WATCH_DIRS:
+                    if os.path.exists(path):
+                        observer.schedule(event_handler, path, recursive=True)
+                observer.start()
 
-            try:
                 while True:
                     time.sleep(1)
-            except KeyboardInterrupt:
-                observer.stop()
-                process.terminate()
-            observer.join()
-        else:
-            print("[RUN] Watchdog module not found. Server running without hot-reload.")
-            try:
-                process.wait()
-            except KeyboardInterrupt:
-                process.terminate()
+            else:
+                server_proc.wait()
+        except KeyboardInterrupt:
+            print("\n[RUN] Shutting down Krock server...")
+        finally:
+            if server_proc:
+                server_proc.terminate()
 
     if __name__ == "__main__":
         main()
 
 else:
-    print("\n[RUN] Krock running in PRODUCTION mode\n")
+    print("\n[RUN] Krock Production Engine Launching (Single Server Mode)...")
     import server_runner
+    server_runner.start()

@@ -4,6 +4,7 @@ import json
 import time
 import re
 import inspect
+import hashlib
 import subprocess
 import importlib.util
 import traceback
@@ -48,6 +49,53 @@ class LRUCache:
         with self.lock:
             return key in self.cache
 
+class SSRWorkerPipe:
+    """Internal Stdio Pipe Worker for SSR - No HTTP server, no open ports."""
+    def __init__(self, project_root):
+        self.project_root = project_root
+        self.worker_script = os.path.join(project_root, "ssr_worker.js")
+        self.process = None
+        self.lock = threading.Lock()
+
+    def _ensure_process(self):
+        if self.process is None or self.process.poll() is not None:
+            if os.path.exists(self.worker_script):
+                self.process = subprocess.Popen(
+                    ["node", self.worker_script],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    encoding="utf-8",
+                    bufsize=1
+                )
+
+    def render(self, ssr_bundle, params):
+        if not os.path.exists(self.worker_script):
+            return None
+
+        with self.lock:
+            try:
+                self._ensure_process()
+                if self.process and self.process.stdin and self.process.stdout:
+                    payload = json.dumps({"bundle_path": ssr_bundle, "params": params})
+                    self.process.stdin.write(payload + "\n")
+                    self.process.stdin.flush()
+
+                    response_line = self.process.stdout.readline()
+                    if response_line:
+                        data = json.loads(response_line)
+                        if "html" in data:
+                            return data["html"]
+            except Exception:
+                if self.process:
+                    try:
+                        self.process.kill()
+                    except Exception:
+                        pass
+                    self.process = None
+        return None
+
 class KrockRequest:
     """Modern request wrapper around WSGI environ and route parameters."""
     def __init__(self, environ, params=None):
@@ -89,7 +137,6 @@ class KrockRequest:
         return self.body().decode('utf-8', errors='ignore')
 
     def get(self, key, default=None):
-        """Helper to get param or query item."""
         if key in self.params:
             return self.params[key]
         if key in self.query:
@@ -156,6 +203,7 @@ class Krock:
         self.routes = self._discover_routes()
         self.cache = LRUCache(capacity=1000)
         self.dep_cache = {}
+        self.ssr_pipe = SSRWorkerPipe(self.project_root)
 
         venv_dir = os.path.dirname(sys.executable)
         esbuild_exe = os.path.join(
@@ -169,7 +217,7 @@ class Krock:
             npx = "npx.cmd" if os.name == "nt" else "npx"
             self.esbuild = [npx, "--yes", "esbuild"]
 
-        print(f"[CORE] Krock Engine Active ({DEPLOYMENT.upper()} mode)")
+        print(f"[CORE] Krock Engine Active ({DEPLOYMENT.upper()} mode - Single Server)")
 
     def build_dependency_graph(self, entry, project_root):
         if entry in self.dep_cache:
@@ -195,9 +243,12 @@ class Krock:
         if not os.path.exists(self.pages_dir):
             return routes
 
-        for root, _, files in os.walk(self.pages_dir):
+        for root, dirs, files in os.walk(self.pages_dir):
+            # Exclude hidden directories, _ directories, or 'components' folders from route discovery
+            dirs[:] = [d for d in dirs if not d.startswith(".") and not d.startswith("_") and d != "components"]
+
             for file in files:
-                if file.startswith("layout.") or file.startswith(".entry"):
+                if file.startswith(".") or file.startswith("_") or file.startswith("layout."):
                     continue
 
                 if not file.endswith((".py", ".tsx", ".jsx")):
@@ -207,6 +258,9 @@ class Krock:
                 rel_path = os.path.relpath(file_path, self.pages_dir)
 
                 parts = rel_path.replace("\\", "/").split("/")
+                if any(p.startswith(".") or p.startswith("_") or p == "components" for p in parts):
+                    continue
+
                 clean_parts = [
                     p for p in parts
                     if not (p.startswith("(") and p.endswith(")"))
@@ -254,7 +308,7 @@ class Krock:
         )
 
     def build_all(self):
-        """Ahead-Of-Time (AOT) build for production."""
+        """Ahead-Of-Time (AOT) pre-compilation for production."""
         print("[BUILD] Pre-compiling all pages Ahead-Of-Time...")
         count = 0
         for regex, base, file_path, ext in self.routes:
@@ -319,7 +373,7 @@ class Krock:
 
             check_dir = parent
 
-        # Dependency graph & modification check
+        # Dependency graph
         deps = self.build_dependency_graph(file_path, self.project_root)
         timestamps = [os.path.getmtime(dep) for dep in deps if os.path.exists(dep)]
         for l in layouts:
@@ -338,7 +392,6 @@ class Krock:
         browser_bundle = os.path.join(tmp_dir, f"browser_{safe_name}.js")
         ssr_bundle = os.path.join(tmp_dir, f"ssr_{safe_name}.js")
 
-        # Layout imports synthesis
         layout_imports = ""
         layout_wrappers_browser = "React.createElement(Page, { params: window.__PARAMS__ })"
         layout_wrappers_ssr = "React.createElement(Page, { params })"
@@ -402,7 +455,7 @@ try {{
         with open(ssr_file, "w", encoding="utf-8") as f:
             f.write(ssr_code)
 
-        # Smart bundle rebuild check (only compile if target is missing or stale)
+        # Browser bundle rebuild check
         need_browser_rebuild = True
         if os.path.exists(browser_bundle) and os.path.getmtime(browser_bundle) >= latest_dep_time and not IS_DEV:
             need_browser_rebuild = False
@@ -447,7 +500,7 @@ try {{
                 with open(browser_css_file, "r", encoding="utf-8") as f:
                     injected_css = f.read()
 
-        # SSR bundling & execution
+        # SSR bundling check
         need_ssr_rebuild = True
         if os.path.exists(ssr_bundle) and os.path.getmtime(ssr_bundle) >= latest_dep_time and not IS_DEV:
             need_ssr_rebuild = False
@@ -468,25 +521,31 @@ try {{
                     res.stderr or res.stdout
                 )
 
-        result = subprocess.run(
-            ["node", ssr_bundle, json.dumps(params)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="ignore"
-        )
+        # 1. FAST STDIO PIPE SSR ATTEMPT (NO HTTP SERVER, NO EXTRA PORTS)
+        ssr_html = self.ssr_pipe.render(ssr_bundle, params)
 
-        if result.returncode != 0 and IS_DEV:
-            return self._render_error_html(
-                "React SSR Runtime Error",
-                f"Exception during Server-Side Rendering of <code>{file_path}</code>",
-                result.stderr
+        # 2. FALLBACK TO DIRECT SINGLE-PASS NODE EXECUTION IF PIPE FAILS
+        if ssr_html is None:
+            result = subprocess.run(
+                ["node", ssr_bundle, json.dumps(params)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="ignore"
             )
 
-        ssr_html = result.stdout.strip()
+            if result.returncode != 0 and IS_DEV:
+                return self._render_error_html(
+                    "React SSR Runtime Error",
+                    f"Exception during Server-Side Rendering of <code>{file_path}</code>",
+                    result.stderr
+                )
+            ssr_html = result.stdout.strip()
+
         build_time = time.time() - start_time
-        print(f"[CORE] Compiled {os.path.basename(file_path)} in {build_time:.3f}s")
+        rel_display = os.path.relpath(file_path, self.project_root).replace("\\", "/")
+        print(f"[CORE] Rendered {rel_display} in {build_time:.3f}s")
 
         final_html = f"""<!DOCTYPE html>
 <html>
@@ -495,6 +554,7 @@ try {{
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Krock App</title>
 <style>{injected_css}</style>
+<script src="/lib/router.js" defer></script>
 </head>
 <body>
 
@@ -516,8 +576,8 @@ window.__PARAMS__ = {json.dumps(params)};
 
         return final_html
 
-    def _serve_static_file(self, path, start_response):
-        """Serve static files from public/ or styles/ directory."""
+    def _serve_static_file(self, path, start_response, environ):
+        """Serve static files with ETag and HTTP 304 conditional caching."""
         if path.startswith("/"):
             clean_path = path[1:]
         else:
@@ -537,11 +597,19 @@ window.__PARAMS__ = {json.dumps(params)};
                 with open(file_path, "rb") as f:
                     content = f.read()
 
+                etag = f'"{hashlib.md5(content).hexdigest()}"'
+                if_none_match = environ.get("HTTP_IF_NONE_MATCH")
+
+                if if_none_match and if_none_match == etag:
+                    start_response("304 Not Modified", [("ETag", etag)])
+                    return (b"",)
+
                 start_response(
                     "200 OK",
                     [
                         ("Content-Type", content_type),
                         ("Content-Length", str(len(content))),
+                        ("ETag", etag),
                         ("Cache-Control", "public, max-age=3600" if not IS_DEV else "no-cache")
                     ]
                 )
@@ -553,12 +621,12 @@ window.__PARAMS__ = {json.dumps(params)};
         method = environ.get("REQUEST_METHOD", "GET")
         path = unquote(environ.get("PATH_INFO", "/"))
 
-        # Check static file serving first
-        static_res = self._serve_static_file(path, start_response)
+        # Serve static asset or client loader
+        static_res = self._serve_static_file(path, start_response, environ)
         if static_res is not None:
             return static_res
 
-        # Match routes
+        # Match dynamic routes
         for regex, base, file_path, ext in self.routes:
             match = regex.match(path)
             if match:
@@ -567,7 +635,18 @@ window.__PARAMS__ = {json.dumps(params)};
                 if ext in ["tsx", "jsx"]:
                     try:
                         html = self._compile_tsx(file_path, params)
-                        start_response("200 OK", [("Content-type", "text/html; charset=utf-8")])
+                        etag = f'"{hashlib.md5(html.encode("utf-8")).hexdigest()}"'
+                        if_none_match = environ.get("HTTP_IF_NONE_MATCH")
+
+                        if if_none_match and if_none_match == etag:
+                            start_response("304 Not Modified", [("ETag", etag)])
+                            return (b"",)
+
+                        start_response("200 OK", [
+                            ("Content-type", "text/html; charset=utf-8"),
+                            ("ETag", etag),
+                            ("Cache-Control", "public, max-age=60" if not IS_DEV else "no-cache")
+                        ])
                         return (html.encode("utf-8"),)
                     except Exception as e:
                         stack = traceback.format_exc()
@@ -578,9 +657,12 @@ window.__PARAMS__ = {json.dumps(params)};
 
                 elif ext == "py":
                     try:
+                        start_py_time = time.time()
                         spec = importlib.util.spec_from_file_location("m", file_path)
                         m = importlib.util.module_from_spec(spec)
                         spec.loader.exec_module(m)
+
+                        rel_file = os.path.relpath(file_path, self.project_root).replace("\\", "/")
 
                         if hasattr(m, "handler"):
                             sig = inspect.signature(m.handler)
@@ -610,14 +692,28 @@ window.__PARAMS__ = {json.dumps(params)};
                                 res_bytes = json.dumps(data).encode("utf-8")
                                 content_type = "application/json; charset=utf-8"
 
-                            start_response(status_code if isinstance(status_code, str) else "200 OK", [
+                            elapsed = time.time() - start_py_time
+                            status_str = status_code if isinstance(status_code, str) else "200 OK"
+                            print(f"[CORE] Executed [{method}] {rel_file} -> {status_str} in {elapsed:.3f}s")
+
+                            etag = f'"{hashlib.md5(res_bytes).hexdigest()}"'
+                            if_none_match = environ.get("HTTP_IF_NONE_MATCH")
+
+                            if if_none_match and if_none_match == etag and method == "GET":
+                                start_response("304 Not Modified", [("ETag", etag)])
+                                return (b"",)
+
+                            start_response(status_str, [
                                 ("Content-type", content_type),
-                                ("Content-Length", str(len(res_bytes)))
+                                ("Content-Length", str(len(res_bytes))),
+                                ("ETag", etag)
                             ])
                             return (res_bytes,)
 
                         elif hasattr(m, "render"):
                             res = m.render(params).encode("utf-8")
+                            elapsed = time.time() - start_py_time
+                            print(f"[CORE] Rendered {rel_file} in {elapsed:.3f}s")
                             start_response("200 OK", [("Content-type", "text/html; charset=utf-8")])
                             return (res,)
 
