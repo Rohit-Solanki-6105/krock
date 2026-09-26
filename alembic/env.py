@@ -19,8 +19,10 @@ import importlib
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from db import Base
-# from models import Todo
+from db import Base, SQLALCHEMY_DATABASE_URL
+
+# Dynamically sync Alembic database URL with db.py & DATABASE_URL env var
+config.set_main_option("sqlalchemy.url", SQLALCHEMY_DATABASE_URL)
 
 # --- AUTOMATIC MODEL DISCOVERY ---
 IGNORE_DIRS = {".git", "venv", "node_modules", "__pycache__", "alembic", ".krock_tmp", "styles"}

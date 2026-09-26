@@ -16,6 +16,8 @@ You can generate a brand new Krock project instantly using `create-krock-app`:
 npx create-krock-app@latest
 ```
 
+`. = current folder when it asks`
+
 Follow the interactive prompts to set your project name and directory.
 
 ### Option 2: Manual Setup
@@ -210,19 +212,21 @@ alembic revision --autogenerate -m "Add Task table"
 alembic upgrade head
 ```
 
-### 3. Switch to PostgreSQL or MySQL
+### 3. Centralized Database URL & Switching to PostgreSQL / MySQL
 
-To use PostgreSQL or MySQL instead of the default SQLite:
+Krock centralizes database configuration in `db.py` and syncs dynamically with Alembic.
 
-Update `SQLALCHEMY_DATABASE_URL` in both `db.py` and `alembic.ini`:
+By default, Krock uses local SQLite (`todos.db`). To switch to PostgreSQL, MySQL, or another database in development or production, define `DATABASE_URL` in your environment or `.env` file:
 
-```python
+```bash
 # PostgreSQL Example
-SQLALCHEMY_DATABASE_URL = "postgresql://user:password@localhost/dbname"
+DATABASE_URL="postgresql://user:password@localhost:5432/dbname" python run.py
 
 # MySQL Example
-SQLALCHEMY_DATABASE_URL = "mysql+pymysql://user:password@localhost/dbname"
+DATABASE_URL="mysql+pymysql://user:password@localhost:3306/dbname" python run.py
 ```
+
+Both your application DB engine (`db.py`) and Alembic migration commands (`alembic upgrade head`) will automatically use the configured `DATABASE_URL` without editing code or `alembic.ini`!
 
 ---
 
