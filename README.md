@@ -230,6 +230,100 @@ Both your application DB engine (`db.py`) and Alembic migration commands (`alemb
 
 ---
 
+## Updating Framework Components & Dependencies
+
+Krock applications consist of two dependency layers: **Frontend (Node.js / React / TypeScript / esbuild)** and **Backend (Python / SQLAlchemy / Alembic / Waitress)**. You can easily update these components to stable releases, the latest releases, or pin specific version numbers.
+
+### 1. Frontend & React Ecosystem Updates
+
+#### Updating to Latest Minor / Patch Compatible Releases (Stable)
+To safely update installed Node packages within semantic version ranges:
+```bash
+npm update
+# Or using npm script:
+npm run update:frontend
+```
+
+#### Updating React & Core DevTools to Latest Major Releases
+To upgrade React 19, TypeScript, esbuild, and Tailwind CSS to their absolute latest versions:
+```bash
+npm install react@latest react-dom@latest
+npm install -D esbuild@latest tailwindcss@latest typescript@latest @types/react@latest @types/react-dom@latest
+
+# Or using the shortcut script:
+npm run update:latest
+```
+
+#### Upgrading to Specific Versions
+If your project requires specific versions (for example, pinning a particular React release or esbuild version):
+```bash
+# Install specific React release
+npm install react@19.0.0 react-dom@19.0.0
+
+# Install specific esbuild or Tailwind version
+npm install -D esbuild@0.28.0 tailwindcss@3.4.19
+```
+
+#### Upgrading All Packages Interactively
+Use `npm-check-updates` to review and upgrade all package versions in `package.json`:
+```bash
+npx npm-check-updates -u
+npm install
+```
+
+---
+
+### 2. Backend & Python Ecosystem Updates
+
+Ensure your virtual environment is active before updating Python packages:
+```bash
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+#### Updating All Python Dependencies to Latest Compatible Versions
+Upgrade all packages listed in `requirements.txt`:
+```bash
+pip install --upgrade -r requirements.txt
+```
+
+#### Updating Core Backend Framework Packages
+To update key backend dependencies (SQLAlchemy, Alembic, Waitress, Watchdog) to their latest stable releases:
+```bash
+pip install --upgrade sqlalchemy alembic waitress watchdog python-dotenv
+```
+
+#### Installing Specific Python Package Versions
+To pin specific versions of Python packages:
+```bash
+# Pin specific SQLAlchemy & Alembic versions
+pip install sqlalchemy==2.0.35 alembic==1.13.3
+
+# Pin specific Waitress server version
+pip install waitress==3.0.0
+```
+
+#### Freezing Updated Python Requirements
+After updating Python packages, sync your `requirements.txt` file for deployment:
+```bash
+pip freeze > requirements.txt
+```
+
+---
+
+### 3. Re-building Application Assets After Component Updates
+
+Whenever you update React, Tailwind CSS, esbuild, or TypeScript, clean temporary cache and rebuild your Ahead-Of-Time (AOT) production bundles:
+
+```bash
+# Clean temporary entry files and cached bundles
+npm run clean
+
+# Re-build AOT production assets
+python run.py build
+```
+
+---
+
 ## License
 
 MIT License. Contributions and feedback are welcome!

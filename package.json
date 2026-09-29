@@ -5,8 +5,11 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "clean": "rm -rf pages/.entry_*",
-    "dev": "python run.py"
+    "clean": "rm -rf pages/.entry_* .krock_tmp",
+    "dev": "python run.py",
+    "build": "python run.py build",
+    "update:frontend": "npm update",
+    "update:latest": "npm install react@latest react-dom@latest && npm install -D esbuild@latest tailwindcss@latest typescript@latest @types/react@latest @types/react-dom@latest"
   },
   "keywords": [
     "fast",
