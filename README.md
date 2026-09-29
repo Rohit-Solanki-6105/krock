@@ -10,15 +10,34 @@ It provides a Next.js-like developer experience—complete with file-system rout
 
 ### Option 1: Create App CLI (Recommended)
 
-You can generate a brand new Krock project instantly using `create-krock-app`:
+Generate a brand new Krock project instantly using `create-krock-app`:
 
 ```bash
 npx create-krock-app@latest
 ```
 
-`. = current folder when it asks`
+Or specify a project directory directly (use `.` for current folder):
 
-Follow the interactive prompts to set your project name and directory.
+```bash
+npx create-krock-app@latest my-app
+
+# Or install inside current folder:
+npx create-krock-app@latest .
+```
+
+#### Interactive Setup Prompts
+When executed, `create-krock-app` will guide you through interactive options:
+- 📂 **Project Name**: Project directory name (or `.` for current folder).
+- 🐍 **Virtual Environment**: Name of your Python venv (default: `venv`).
+- 🗄️ **Database Choice**: Choose **SQLite** (default zero-config), **PostgreSQL**, or **MySQL**.
+- ⚡ **Dependencies Mode**: Choose **Latest** (React 19+, Tailwind, esbuild & latest Python packages), **Default** (template releases), or **Skip**.
+- 🔧 **Git Initialization**: Option to initialize a clean Git repository.
+
+#### Non-Interactive CLI Options
+You can also pass flags directly for automated setup:
+```bash
+npx create-krock-app@latest my-app --latest --db postgres --venv venv
+```
 
 ### Option 2: Manual Setup
 
